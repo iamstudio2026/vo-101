@@ -13,7 +13,7 @@ declare global {
   }
 }
 
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Monitor, Coffee, MessageSquare, Brain, AlertCircle, User, CheckSquare, ListTodo, Play, CheckCircle2, Package, X, ArrowRight, Archive, FileText, ExternalLink, Download, ClipboardCheck, Loader2, Sparkles, Terminal, Code, Cpu, Zap, Github, BookOpen, Image as ImageIcon, MapPin, Volume2, VolumeX, Send, Wand2 as WandIcon, Book, Plus, Trash2, Users, File, Link, HardDrive, Share2, Upload, Eye, Accessibility, Hand, Mic, FileAudio } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import Markdown from 'react-markdown';
@@ -248,6 +248,7 @@ export const Miniverse: React.FC = () => {
   };
 
   const analyzeImage = async (base64Image: string) => {
+    if (currentOffice?.status === 'closed') return;
     setAnalyzingImage(true);
     setAnalysisResult(null);
     try {
@@ -299,16 +300,15 @@ export const Miniverse: React.FC = () => {
     }
   };
 
-  const generateAIResult = async (task: Task, agentName: string) => {
+  const generateAIResult = async (task: Task, worker: Citizen | Worker) => {
+    if (currentOffice?.status === 'closed') return "Office is closed. Task processing paused.";
     try {
       const knowledgeContext = knowledge.length > 0 
         ? `\n\nRELEVANT KNOWLEDGE BASE:\n${knowledge.map(k => `--- ${k.title} ---\n${k.content}`).join('\n\n')}`
         : '';
 
-      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY! });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `You are an AI agent named ${agentName} working in a digital Virtual Office. 
+      const model = worker.model || "gemini-1.5-flash";
+      const systemInstruction = `You are an AI agent named ${worker.name} working in a digital Virtual Office. 
         You have just completed a task titled: "${task.title}".
         ${task.description ? `Task description: ${task.description}` : ''}
         
@@ -318,13 +318,11 @@ export const Miniverse: React.FC = () => {
         If it's a report, write the report. If it's code, write the code. If it's a creative task, provide the creative output.
         Format it nicely with headers and sections if appropriate. 
         Make it feel like it was truly produced by an intelligent agent.
-        Use Google Search if you need up-to-date information to complete the task accurately.`,
-        config: {
-          tools: [{ googleSearch: {} }]
-        }
-      });
+        Use Google Search if you need up-to-date information to complete the task accurately.`;
 
-      return response.text || "No content could be generated.";
+      const result = await aiService.generateWorkerResponse(model, "Complete the task shared in system instructions.", systemInstruction);
+
+      return result || "No content could be generated.";
     } catch (error) {
       console.error("AI Generation Error:", error);
       return `Error generating content: ${error instanceof Error ? error.message : 'Unknown error'}`;
@@ -387,7 +385,7 @@ export const Miniverse: React.FC = () => {
   };
 
   const handleBroadcastMessage = async (message: string) => {
-    if (!currentOffice || !currentUser) return;
+    if (!currentOffice || !currentUser || currentOffice.status === 'closed') return;
 
     // 1. Add user message to Firestore
     const userMsg = {
@@ -428,7 +426,7 @@ export const Miniverse: React.FC = () => {
               responseText = res.text || "";
               groundingUrls = res.groundingUrls;
             } else {
-              responseText = await aiService.generateFastResponse(message, systemInstruction) || "";
+              responseText = await aiService.generateFastResponse(message, systemInstruction, agent.model) || "";
             }
 
             if (responseText) {
@@ -480,9 +478,10 @@ export const Miniverse: React.FC = () => {
     );
 
     const unsubscribeWorkers = onSnapshot(q, (snapshot) => {
-      const workersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Worker));
+      const allWorkers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Worker));
+      const workersData = allWorkers.filter(w => w.isEnabled !== false);
       
-      setCitizens(prev => {
+      setCitizens((prev: Citizen[]) => {
         return workersData.map(worker => {
           const existing = prev.find(c => c.id === worker.id);
           if (existing) {
@@ -501,7 +500,10 @@ export const Miniverse: React.FC = () => {
           } as Citizen;
         });
       });
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'workers'));
+    }, (error: any) => {
+      console.error("Firestore Worker Subscription Error:", error);
+      handleFirestoreError(error, OperationType.LIST, 'workers');
+    });
 
     const tasksQuery = query(
       collection(db, 'tasks'),
@@ -512,7 +514,10 @@ export const Miniverse: React.FC = () => {
     const unsubscribeTasks = onSnapshot(tasksQuery, (snapshot) => {
       const tasksData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task));
       setTasks(tasksData);
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'tasks'));
+    }, (error: any) => {
+      console.error("Firestore Task Subscription Error:", error);
+      handleFirestoreError(error, OperationType.LIST, 'tasks');
+    });
 
     const messagesQuery = query(
       collection(db, 'messages'),
@@ -533,7 +538,10 @@ export const Miniverse: React.FC = () => {
           (m.senderId === citizen.id || m.receiverId === citizen.id)
         )
       })));
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'messages'));
+    }, (error: any) => {
+      console.error("Firestore Message Subscription Error:", error);
+      handleFirestoreError(error, OperationType.LIST, 'messages');
+    });
 
     const knowledgeQuery = query(
       collection(db, 'knowledge'),
@@ -545,7 +553,10 @@ export const Miniverse: React.FC = () => {
     const unsubscribeKnowledge = onSnapshot(knowledgeQuery, (snapshot) => {
       const knowledgeData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Knowledge));
       setKnowledge(knowledgeData);
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'knowledge'));
+    }, (error: any) => {
+      console.error("Firestore Knowledge Subscription Error:", error);
+      handleFirestoreError(error, OperationType.LIST, 'knowledge');
+    });
 
     return () => {
       unsubscribeWorkers();
@@ -569,7 +580,7 @@ export const Miniverse: React.FC = () => {
         createdAt: new Date().toISOString()
       });
       setNewKnowledge({ title: '', content: '', externalUrl: '' });
-    } catch (error) {
+    } catch (error: any) {
       handleFirestoreError(error, OperationType.WRITE, 'knowledge');
     } finally {
       setIsAddingKnowledge(false);
@@ -579,14 +590,14 @@ export const Miniverse: React.FC = () => {
   const handleDeleteKnowledge = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'knowledge', id));
-    } catch (error) {
+    } catch (error: any) {
       handleFirestoreError(error, OperationType.DELETE, 'knowledge');
     }
   };
 
-  // Movement & Interaction Logic
   useEffect(() => {
     const interval = setInterval(() => {
+      if (currentOffice?.status === 'closed') return;
       setCitizens(prev => {
         const next = prev.map(c => ({ ...c }));
 
@@ -767,10 +778,14 @@ export const Miniverse: React.FC = () => {
   }, []);
 
   const assignWork = async (citizenId: string, taskId: string) => {
+    if (currentOffice?.status === 'closed') {
+      alert("Office is closed. Tasks cannot be assigned.");
+      return;
+    }
     const citizen = citizens.find(c => c.id === citizenId);
     const task = tasks.find(t => t.id === taskId);
 
-    setCitizens(prev => prev.map(c => {
+    setCitizens((prev: Citizen[]) => prev.map(c => {
       if (c.id === citizenId) {
         return { ...c, isAssignedWork: true, workProgress: 0, hasProduct: false, currentTaskId: taskId };
       }
@@ -785,14 +800,14 @@ export const Miniverse: React.FC = () => {
       });
 
       // START AI GENERATION AUTONOMOUSLY
-      if (task) {
-        generateAIResult(task, citizen?.name || 'Agent').then(async (result) => {
+      if (task && citizen) {
+        generateAIResult(task, citizen).then(async (result) => {
           await updateDoc(doc(db, 'tasks', taskId), {
             result: result
           });
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating task status:", error);
     }
   };
@@ -803,7 +818,7 @@ export const Miniverse: React.FC = () => {
       await updateDoc(doc(db, 'tasks', taskId), {
         status: 'done'
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error completing task:", error);
     }
   };
@@ -811,17 +826,33 @@ export const Miniverse: React.FC = () => {
   const processTaskWithAI = async (task: Task) => {
     setIsGenerating(true);
     const citizen = citizens.find(c => c.id === task.assignedTo);
-    const result = await generateAIResult(task, citizen?.name || 'Agent');
+    if (!citizen) {
+      setIsGenerating(false);
+      return;
+    }
+    const result = await generateAIResult(task, citizen);
     
     try {
       await updateDoc(doc(db, 'tasks', task.id), {
         result: result
       });
-      setViewingTaskResult(prev => prev ? { ...prev, result } : null);
-    } catch (error) {
+      setViewingTaskResult((prev: Task | null) => prev ? { ...prev, result } : null);
+    } catch (error: any) {
       console.error("Error updating task with AI result:", error);
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleCreateTask = async (taskData: Partial<Task>) => {
+    try {
+      await addDoc(collection(db, 'tasks'), {
+        ...taskData,
+        status: 'pending',
+        timestamp: new Date()
+      });
+    } catch (error: any) {
+      console.error("Error creating task:", error);
     }
   };
 

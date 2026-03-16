@@ -31,13 +31,19 @@ export const OfficeProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const fetchedOffices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Office));
       setOffices(fetchedOffices);
       
-      if (fetchedOffices.length > 0 && !currentOffice) {
-        setCurrentOffice(fetchedOffices[0]);
-      } else if (fetchedOffices.length === 0) {
+      if (fetchedOffices.length > 0) {
+        if (!currentOffice) {
+          setCurrentOffice(fetchedOffices[0]);
+        } else {
+          const latest = fetchedOffices.find(o => o.id === currentOffice.id);
+          if (latest) {
+            setCurrentOffice(latest);
+          } else {
+            setCurrentOffice(fetchedOffices[0]);
+          }
+        }
+      } else {
         setCurrentOffice(null);
-      } else if (currentOffice) {
-        const stillExists = fetchedOffices.find(o => o.id === currentOffice.id);
-        if (!stillExists) setCurrentOffice(fetchedOffices[0] || null);
       }
     });
 

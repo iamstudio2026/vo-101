@@ -15,12 +15,22 @@ export const Workers: React.FC = () => {
   const [role, setRole] = useState('');
   const [skills, setSkills] = useState('');
   const [responsibilities, setResponsibilities] = useState('');
+  const [model, setModel] = useState('gemini-1.5-flash');
+  const [isEnabled, setIsEnabled] = useState(true);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState('');
   const [editSkills, setEditSkills] = useState('');
   const [editResponsibilities, setEditResponsibilities] = useState('');
+  const [editModel, setEditModel] = useState('gemini-1.5-flash');
+  const [editIsEnabled, setEditIsEnabled] = useState(true);
+
+  const AVAILABLE_MODELS = [
+    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Fast)' },
+    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (Smart)' },
+    { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Standard)' }
+  ];
 
   useEffect(() => {
     if (!currentUser || !currentOffice) {
@@ -41,6 +51,12 @@ export const Workers: React.FC = () => {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !role.trim() || !currentUser || !currentOffice) return;
+
+    if (currentOffice.status === 'closed') {
+      alert("Office is closed. You can't add workers right now.");
+      return;
+    }
+
     setLoading(true);
     try {
       const skillsArray = skills.split(',').map((s: string) => s.trim()).filter(Boolean);
@@ -49,6 +65,8 @@ export const Workers: React.FC = () => {
         role: role.trim(),
         skills: skillsArray,
         responsibilities: responsibilities.trim(),
+        model: model,
+        isEnabled: isEnabled,
         status: 'available',
         officeId: currentOffice.id,
         ownerId: currentUser.uid,
@@ -58,6 +76,8 @@ export const Workers: React.FC = () => {
       setRole('');
       setSkills('');
       setResponsibilities('');
+      setModel('gemini-1.5-flash');
+      setIsEnabled(true);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'workers');
     } finally {
@@ -71,6 +91,8 @@ export const Workers: React.FC = () => {
     setEditRole(worker.role);
     setEditSkills(worker.skills?.join(', ') || '');
     setEditResponsibilities(worker.responsibilities || '');
+    setEditModel(worker.model || 'gemini-1.5-flash');
+    setEditIsEnabled(worker.isEnabled !== false);
   };
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -84,6 +106,8 @@ export const Workers: React.FC = () => {
         role: editRole.trim(),
         skills: skillsArray,
         responsibilities: editResponsibilities.trim(),
+        model: editModel,
+        isEnabled: editIsEnabled,
       });
       setEditingId(null);
     } catch (error) {
@@ -164,6 +188,31 @@ export const Workers: React.FC = () => {
                   rows={3}
                 />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">AI Model</label>
+                <select
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
+                >
+                  {AVAILABLE_MODELS.map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center justify-between py-2">
+                <span className="text-sm font-medium text-slate-700">Agent Enabled</span>
+                <button
+                  type="button"
+                  onClick={() => setIsEnabled(!isEnabled)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+
               <button
                 type="submit"
                 disabled={loading || !name.trim() || !role.trim()}
@@ -238,6 +287,25 @@ export const Workers: React.FC = () => {
                         placeholder="Responsibilities"
                         rows={2}
                       />
+                      <select
+                        value={editModel}
+                        onChange={(e) => setEditModel(e.target.value)}
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white"
+                      >
+                        {AVAILABLE_MODELS.map(m => (
+                          <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                      </select>
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-xs font-medium text-slate-600">Enabled</span>
+                        <button
+                          type="button"
+                          onClick={() => setEditIsEnabled(!editIsEnabled)}
+                          className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${editIsEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                        >
+                          <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${editIsEnabled ? 'translate-x-5' : 'translate-x-1'}`} />
+                        </button>
+                      </div>
                     </div>
                   </form>
                 ) : (
@@ -259,13 +327,25 @@ export const Workers: React.FC = () => {
                       </button>
                     </div>
                     <div className="flex items-center gap-4 mb-4">
-                      <div className="w-12 h-12 bg-slate-100 text-slate-500 rounded-full flex items-center justify-center shrink-0">
+                      <div className={`w-12 h-12 ${worker.isEnabled !== false ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'} rounded-full flex items-center justify-center shrink-0`}>
                         <UserCircle className="w-8 h-8" />
                       </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-slate-900">{worker.name}</h3>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-lg font-semibold text-slate-900">{worker.name}</h3>
+                          {worker.isEnabled === false && (
+                            <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-bold rounded uppercase">Disabled</span>
+                          )}
+                        </div>
                         <p className="text-sm text-emerald-600 font-medium">{worker.role}</p>
                       </div>
+                    </div>
+                    
+                    <div className="mb-4">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Model</p>
+                      <p className="text-xs text-slate-600 bg-slate-50 px-2 py-1 rounded inline-block">
+                        {AVAILABLE_MODELS.find(m => m.id === worker.model)?.name || worker.model || 'Standard'}
+                      </p>
                     </div>
                     
                     {worker.skills && worker.skills.length > 0 && (

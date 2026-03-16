@@ -11,7 +11,7 @@ export const Auth: React.FC = () => {
 
   useEffect(() => {
     if (!loading && currentUser) {
-      navigate('/dashboard', { replace: true });
+      navigate('/app/dashboard', { replace: true });
     }
   }, [currentUser, loading, navigate]);
 

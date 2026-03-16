@@ -8,10 +8,20 @@ export const getAiClient = () => {
   return new GoogleGenAI({ apiKey });
 };
 
-export const generateFastResponse = async (prompt: string, systemInstruction?: string) => {
+export const generateFastResponse = async (prompt: string, systemInstruction?: string, modelOverride?: string) => {
   const ai = getAiClient();
   const response = await ai.models.generateContent({
-    model: "gemini-3.1-flash-lite-preview",
+    model: modelOverride || "gemini-3.1-flash-lite-preview",
+    contents: prompt,
+    config: { systemInstruction }
+  });
+  return response.text;
+};
+
+export const generateWorkerResponse = async (model: string, prompt: string, systemInstruction?: string) => {
+  const ai = getAiClient();
+  const response = await ai.models.generateContent({
+    model: model || "gemini-1.5-flash",
     contents: prompt,
     config: { systemInstruction }
   });

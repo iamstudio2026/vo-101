@@ -176,9 +176,35 @@ export const Offices: React.FC = () => {
                         <Building2 className="w-6 h-6" />
                       </div>
                       <div>
-                        <h3 className="text-lg font-semibold text-slate-900">{office.name}</h3>
+                        <div className="flex items-center gap-3">
+                          <h3 className="text-lg font-semibold text-slate-900">{office.name}</h3>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest ${
+                            office.status === 'open' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                          }`}>
+                            {office.status || 'open'}
+                          </span>
+                        </div>
                         {office.description && <p className="text-slate-500 mt-1">{office.description}</p>}
-                        <p className="text-xs text-slate-400 mt-2">Created: {new Date(office.createdAt).toLocaleDateString()}</p>
+                        <div className="flex items-center gap-4 mt-2">
+                          <p className="text-xs text-slate-400">Created: {new Date(office.createdAt).toLocaleDateString()}</p>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const newStatus = office.status === 'closed' ? 'open' : 'closed';
+                                await updateDoc(doc(db, 'offices', office.id), { status: newStatus });
+                              } catch (err) {
+                                handleFirestoreError(err, OperationType.UPDATE, `offices/${office.id}`);
+                              }
+                            }}
+                            className={`text-xs font-bold px-3 py-1 rounded-lg transition-all border ${
+                              office.status === 'closed' 
+                                ? 'bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700' 
+                                : 'bg-white border-rose-200 text-rose-600 hover:bg-rose-50'
+                            }`}
+                          >
+                            {office.status === 'closed' ? 'Open Office' : 'Close Office'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                     <div className="flex gap-2">

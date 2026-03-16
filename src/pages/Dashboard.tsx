@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useOffice } from '../context/OfficeContext';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, limit, orderBy } from 'firebase/firestore';
-import { Task, Worker } from '../types';
-import { Building2, Users, CheckSquare, Clock, ArrowRight } from 'lucide-react';
+import { collection, query, where, onSnapshot, limit, orderBy, updateDoc, doc } from 'firebase/firestore';
+import { Task, Worker, OperationType } from '../types';
+import { Building2, Users, CheckSquare, Clock, ArrowRight, Power, PowerOff } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
+import { handleFirestoreError } from '../firebase';
 
 export const Dashboard: React.FC = () => {
   const { currentUser } = useAuth();
@@ -70,9 +71,38 @@ export const Dashboard: React.FC = () => {
       animate={{ opacity: 1 }}
       className="max-w-5xl mx-auto"
     >
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-slate-900">{currentOffice.name}</h1>
-        <p className="text-slate-500 mt-1">{currentOffice.description || 'Welcome to your virtual office dashboard.'}</p>
+      <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">{currentOffice.name}</h1>
+          <p className="text-slate-500 mt-1">{currentOffice.description || 'Welcome to your virtual office dashboard.'}</p>
+        </div>
+        <div className={`flex items-center gap-3 p-1 rounded-2xl border transition-all ${
+          currentOffice.status === 'closed' ? 'bg-red-50 border-red-100' : 'bg-emerald-50 border-emerald-100'
+        }`}>
+          <button
+            onClick={async () => {
+              if (!currentOffice) return;
+              try {
+                await updateDoc(doc(db, 'offices', currentOffice.id), {
+                  status: currentOffice.status === 'closed' ? 'open' : 'closed'
+                });
+              } catch (error) {
+                handleFirestoreError(error, OperationType.UPDATE, `offices/${currentOffice.id}`);
+              }
+            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold transition-all ${
+              currentOffice.status === 'closed' 
+                ? 'bg-red-500 text-white shadow-lg shadow-red-200' 
+                : 'bg-emerald-500 text-white shadow-lg shadow-emerald-200'
+            }`}
+          >
+            {currentOffice.status === 'closed' ? (
+              <><PowerOff className="w-4 h-4" /> Office Closed</>
+            ) : (
+              <><Power className="w-4 h-4" /> Office Open</>
+            )}
+          </button>
+        </div>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -112,7 +142,7 @@ export const Dashboard: React.FC = () => {
               <Clock className="w-5 h-5 text-indigo-500" />
               Recent Tasks
             </h3>
-            <Link to="/tasks" className="text-sm text-indigo-600 hover:underline flex items-center gap-1">
+            <Link to="/app/tasks" className="text-sm text-indigo-600 hover:underline flex items-center gap-1">
               View all <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
@@ -147,13 +177,13 @@ export const Dashboard: React.FC = () => {
           </p>
           <div className="flex gap-4">
             <Link 
-              to="/miniverse" 
+              to="/app/miniverse" 
               className="flex-1 bg-indigo-50 text-indigo-700 px-4 py-3 rounded-xl font-medium text-center hover:bg-indigo-100 transition-colors"
             >
               Enter Miniverse
             </Link>
             <Link 
-              to="/workers" 
+              to="/app/workers" 
               className="flex-1 bg-emerald-50 text-emerald-700 px-4 py-3 rounded-xl font-medium text-center hover:bg-emerald-100 transition-colors"
             >
               Add Workers

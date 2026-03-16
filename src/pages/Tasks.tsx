@@ -23,6 +23,8 @@ export const Tasks: React.FC = () => {
   const [aiLoading, setAiLoading] = useState(false);
   const [flowPrompt, setFlowPrompt] = useState('');
   const [showFlowModal, setShowFlowModal] = useState(false);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [frequency, setFrequency] = useState<'daily'>('daily');
 
   useEffect(() => {
     if (!currentUser || !currentOffice) {
@@ -37,7 +39,24 @@ export const Tasks: React.FC = () => {
       where('officeId', '==', currentOffice.id)
     );
     const unsubTasks = onSnapshot(qTasks, (snapshot) => {
-      setTasks(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Task)));
+      const fetchedTasks = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as Task));
+      
+      // Auto-reset daily tasks if they were completed on a previous day
+      const today = new Date().toDateString();
+      fetchedTasks.forEach(async (task) => {
+        if (task.isRecurring && task.frequency === 'daily' && task.status === 'done' && task.lastCompletedAt) {
+          const lastDate = new Date(task.lastCompletedAt).toDateString();
+          if (lastDate !== today) {
+            try {
+              await updateDoc(doc(db, 'tasks', task.id), { status: 'todo' });
+            } catch (err) {
+              console.error("Failed to reset daily task:", err);
+            }
+          }
+        }
+      });
+
+      setTasks(fetchedTasks);
     }, (error: Error) => handleFirestoreError(error, OperationType.LIST, 'tasks'));
 
     const qWorkers = query(
@@ -58,6 +77,12 @@ export const Tasks: React.FC = () => {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !currentUser || !currentOffice) return;
+    
+    if (currentOffice.status === 'closed') {
+      alert("Office is closed. You can't create or assign tasks right now.");
+      return;
+    }
+
     setLoading(true);
     try {
       await addDoc(collection(db, 'tasks'), {
@@ -65,6 +90,8 @@ export const Tasks: React.FC = () => {
         description: description.trim(),
         assignedTo: assignedTo || null,
         status: 'todo',
+        isRecurring,
+        frequency: isRecurring ? frequency : null,
         officeId: currentOffice.id,
         ownerId: currentUser.uid,
         createdAt: new Date().toISOString(),
@@ -162,7 +189,11 @@ export const Tasks: React.FC = () => {
 
   const handleStatusChange = async (id: string, newStatus: 'todo' | 'in-progress' | 'done') => {
     try {
-      await updateDoc(doc(db, 'tasks', id), { status: newStatus });
+      const updates: any = { status: newStatus };
+      if (newStatus === 'done') {
+        updates.lastCompletedAt = new Date().toISOString();
+      }
+      await updateDoc(doc(db, 'tasks', id), updates);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `tasks/${id}`);
     }
@@ -285,6 +316,28 @@ export const Tasks: React.FC = () => {
                   ))}
                 </select>
               </div>
+              <div className="flex items-center gap-2 py-2">
+                <input
+                  type="checkbox"
+                  id="recurring"
+                  checked={isRecurring}
+                  onChange={(e) => setIsRecurring(e.target.checked)}
+                  className="w-4 h-4 text-amber-500 border-slate-300 rounded focus:ring-amber-500"
+                />
+                <label htmlFor="recurring" className="text-sm font-medium text-slate-700">Recurring Task</label>
+              </div>
+              {isRecurring && (
+                <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Frequency</label>
+                  <select
+                    value={frequency}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFrequency(e.target.value as 'daily')}
+                    className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm"
+                  >
+                    <option value="daily">Daily</option>
+                  </select>
+                </div>
+              )}
               <button
                 type="submit"
                 disabled={loading || !title.trim()}
@@ -427,6 +480,12 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, workers, onStatusChange, onDe
             {task.flowId && (
               <span className="text-[10px] uppercase tracking-wider font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">
                 Flow
+              </span>
+            )}
+            {task.isRecurring && (
+              <span className="text-[10px] uppercase tracking-wider font-bold bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <Clock className="w-2.5 h-2.5" />
+                {task.frequency}
               </span>
             )}
           </div>

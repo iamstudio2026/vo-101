@@ -10,6 +10,7 @@ export interface Office {
   id: string;
   name: string;
   description?: string;
+  status?: 'open' | 'closed';
   ownerId: string;
   createdAt: string;
 }
@@ -24,6 +25,8 @@ export interface Worker {
   status?: 'available' | 'busy' | 'offline';
   ownerId: string;
   createdAt: string;
+  model?: string;
+  isEnabled?: boolean;
 }
 
 export interface Task {
@@ -37,6 +40,9 @@ export interface Task {
   result?: string;
   flowId?: string;
   flowName?: string;
+  isRecurring?: boolean;
+  frequency?: 'daily';
+  lastCompletedAt?: string;
   ownerId: string;
   createdAt: string;
 }
