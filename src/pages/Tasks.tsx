@@ -187,6 +187,43 @@ export const Tasks: React.FC = () => {
     }
   };
 
+  const refineTaskWithAI = async (currentTitle: string, currentDesc: string) => {
+    if (!currentTitle.trim()) return;
+    setAiLoading(true);
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.1-flash-lite-preview',
+        contents: `Refine this task into a one-paragraph actionable instruction for an AI agent: Title: "${currentTitle}", Current Description: "${currentDesc}". Focus on what the final result should be. Return ONLY the refined description.`,
+      });
+      const refined = response.text?.trim() || '';
+      if (refined) {
+        setDescription(refined);
+      }
+    } catch (error) {
+      console.error('Refine task error:', error);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleRefineExistingTask = async (id: string, title: string, currentDesc: string) => {
+    setAiLoading(true);
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.1-flash-lite-preview',
+        contents: `Refine this task into a one-paragraph actionable instruction for an AI agent: Title: "${title}", Current Description: "${currentDesc}". Return ONLY the refined description.`,
+      });
+      const refined = response.text?.trim() || '';
+      if (refined) {
+        await updateDoc(doc(db, 'tasks', id), { description: refined });
+      }
+    } catch (error) {
+      console.error('Refine existing task error:', error);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const handleStatusChange = async (id: string, newStatus: 'todo' | 'in-progress' | 'done') => {
     try {
       const updates: any = { status: newStatus };
@@ -283,17 +320,31 @@ export const Tasks: React.FC = () => {
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <label className="block text-sm font-medium text-slate-700">Description</label>
-                  {title && (
-                    <button
-                      type="button"
-                      onClick={() => smartAssign(title, description)}
-                      disabled={aiLoading || workers.length === 0}
-                      className="text-xs text-indigo-600 font-medium flex items-center gap-1 hover:underline disabled:opacity-50"
-                    >
-                      {aiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                      Smart Assign
-                    </button>
-                  )}
+                  <div className="flex gap-2">
+                    {title && (
+                      <button
+                        type="button"
+                        onClick={() => refineTaskWithAI(title, description)}
+                        disabled={aiLoading}
+                        className="text-xs text-indigo-600 font-medium flex items-center gap-1 hover:underline disabled:opacity-50"
+                        title="Refine instructions with AI"
+                      >
+                        {aiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                        Refine
+                      </button>
+                    )}
+                    {title && (
+                      <button
+                        type="button"
+                        onClick={() => smartAssign(title, description)}
+                        disabled={aiLoading || workers.length === 0}
+                        className="text-xs text-emerald-600 font-medium flex items-center gap-1 hover:underline disabled:opacity-50"
+                      >
+                        {aiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                        Smart Assign
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <textarea
                   value={description}
@@ -359,6 +410,7 @@ export const Tasks: React.FC = () => {
                   workers={workers} 
                   onStatusChange={handleStatusChange} 
                   onDelete={handleDelete}
+                  onRefineTask={handleRefineExistingTask}
                   getStatusIcon={getStatusIcon}
                 />
               ))}
@@ -382,6 +434,7 @@ export const Tasks: React.FC = () => {
                         workers={workers} 
                         onStatusChange={handleStatusChange} 
                         onDelete={handleDelete}
+                        onRefineTask={handleRefineExistingTask}
                         getStatusIcon={getStatusIcon}
                       />
                     ))}
@@ -453,10 +506,11 @@ interface TaskCardProps {
   workers: Worker[];
   onStatusChange: (id: string, status: 'todo' | 'in-progress' | 'done') => void;
   onDelete: (id: string) => void;
+  onRefineTask?: (title: string, desc: string, id: string) => void;
   getStatusIcon: (status: string) => React.ReactNode;
 }
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, workers, onStatusChange, onDelete, getStatusIcon }) => {
+const TaskCard: React.FC<TaskCardProps> = ({ task, workers, onStatusChange, onDelete, onRefineTask, getStatusIcon }) => {
   return (
     <motion.div 
       layout
@@ -473,20 +527,31 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, workers, onStatusChange, onDe
           {getStatusIcon(task.status)}
         </button>
         <div className="flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className={`text-lg font-semibold ${task.status === 'done' ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
-              {task.title}
-            </h3>
-            {task.flowId && (
-              <span className="text-[10px] uppercase tracking-wider font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">
-                Flow
-              </span>
-            )}
-            {task.isRecurring && (
-              <span className="text-[10px] uppercase tracking-wider font-bold bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full flex items-center gap-1">
-                <Clock className="w-2.5 h-2.5" />
-                {task.frequency}
-              </span>
+          <div className="flex items-center gap-2 flex-wrap justify-between pr-8">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className={`text-lg font-semibold ${task.status === 'done' ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
+                {task.title}
+              </h3>
+              {task.flowId && (
+                <span className="text-[10px] uppercase tracking-wider font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">
+                  Flow
+                </span>
+              )}
+              {task.isRecurring && (
+                <span className="text-[10px] uppercase tracking-wider font-bold bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <Clock className="w-2.5 h-2.5" />
+                  {task.frequency}
+                </span>
+              )}
+            </div>
+            {onRefineTask && task.status !== 'done' && (
+              <button
+                onClick={() => onRefineTask(task.title, task.description || '', task.id)}
+                className="text-[10px] font-bold text-indigo-600 flex items-center gap-1 hover:bg-indigo-50 px-2 py-1 rounded-lg transition-colors"
+              >
+                <Wand2 className="w-3 h-3" />
+                Refine Instructions
+              </button>
             )}
           </div>
           {task.description && <p className="text-slate-500 mt-1 text-sm">{task.description}</p>}

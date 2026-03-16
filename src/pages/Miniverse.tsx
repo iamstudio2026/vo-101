@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useOffice } from '../context/OfficeContext';
 import { db, handleFirestoreError } from '../firebase';
 import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, deleteDoc, orderBy, limit } from 'firebase/firestore';
-import { Worker, Task, OperationType, AspectRatio, Citizen, ChatMessage, Knowledge } from '../types';
+import { Worker, Task, OperationType, AspectRatio, Citizen, ChatMessage, Knowledge, Office } from '../types';
 
 declare global {
   interface Window {
@@ -85,6 +85,18 @@ export const Miniverse: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const worldContainerRef = useRef<HTMLDivElement>(null);
   const [gridSize, setGridSize] = useState(40);
+  
+  // Refs for simulation loop to avoid stale closures
+  const tasksRef = useRef<Task[]>([]);
+  const officeRef = useRef<Office | null>(null);
+
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
+
+  useEffect(() => {
+    officeRef.current = currentOffice;
+  }, [currentOffice]);
 
   useEffect(() => {
     if (!worldContainerRef.current) return;
@@ -599,10 +611,42 @@ export const Miniverse: React.FC = () => {
     const interval = setInterval(() => {
       if (currentOffice?.status === 'closed') return;
       setCitizens(prev => {
+        if (prev.length === 0) return prev;
+
         const next = prev.map(c => ({ ...c }));
 
         for (let i = 0; i < next.length; i++) {
           const c = next[i];
+
+          // Autonomous Task Detection
+          // If citizen is idle and not assigned work, check for tasks assigned to them in Firestore
+          if (c.currentAction === 'idle' && !c.isAssignedWork) {
+            const taskToStart = (tasksRef.current || []).find(t => 
+              t.assignedTo === c.id && 
+              (t.status === 'todo' || t.status === 'in-progress')
+            );
+
+            if (taskToStart) {
+              c.isAssignedWork = true;
+              c.workProgress = 0;
+              c.hasProduct = false;
+              c.currentTaskId = taskToStart.id;
+              
+              // Move to Work Area
+              c.targetX = WORK_AREA.x + Math.random() * (WORK_AREA.width - 1);
+              c.targetY = WORK_AREA.y + Math.random() * (WORK_AREA.height - 1);
+              c.currentAction = 'walking';
+
+              // If it was 'todo', mark it as 'in-progress' in Firestore
+              if (taskToStart.status === 'todo') {
+                updateDoc(doc(db, 'tasks', taskToStart.id), { status: 'in-progress' }).catch(console.error);
+                // Also trigger AI Generation immediately so it's ready when they finish
+                generateAIResult(taskToStart, c).then(async (result) => {
+                  await updateDoc(doc(db, 'tasks', taskToStart.id), { result });
+                }).catch(console.error);
+              }
+            }
+          }
 
           // Handle Chatting State
           if (c.currentAction === 'chatting') {
@@ -813,7 +857,12 @@ export const Miniverse: React.FC = () => {
   };
 
   const completeTask = async (citizenId: string, taskId: string) => {
+    const citizen = citizens.find(c => c.id === citizenId);
+    const task = tasks.find(t => t.id === taskId);
     try {
+      if (citizen && task) {
+        sendAgentMessage(citizen, `I've finished the task: "${task.title}". The output is ready in the storage area.`);
+      }
       // Mark as done. The result is already being generated or is ready from assignWork
       await updateDoc(doc(db, 'tasks', taskId), {
         status: 'done'
@@ -1519,7 +1568,9 @@ export const Miniverse: React.FC = () => {
                   {selectedCitizen.isAssignedWork && (
                     <div className="pt-1">
                       <div className="flex justify-between text-[9px] uppercase font-bold text-slate-400 mb-1">
-                        <span>Progress</span>
+                        <span className="truncate max-w-[100px]">
+                          {tasks.find(t => t.id === selectedCitizen.currentTaskId)?.title || 'Task in Progress'}
+                        </span>
                         <span>{Math.floor(selectedCitizen.workProgress || 0)}%</span>
                       </div>
                       <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
