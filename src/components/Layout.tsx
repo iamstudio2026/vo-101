@@ -11,12 +11,12 @@ export const Layout: React.FC = () => {
   const location = useLocation();
 
   const navigation = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-    { name: 'Office Simulation', href: '/miniverse', icon: Globe },
-    { name: 'Offices', href: '/offices', icon: Building2 },
-    { name: 'Workers', href: '/workers', icon: Users },
-    { name: 'Tasks', href: '/tasks', icon: CheckSquare },
-    { name: 'Audio Analyzer', href: '/audio', icon: Mic },
+    { name: 'Dashboard', href: '/app/dashboard', icon: LayoutDashboard },
+    { name: 'Office Simulation', href: '/app/miniverse', icon: Globe },
+    { name: 'Offices', href: '/app/offices', icon: Building2 },
+    { name: 'Workers', href: '/app/workers', icon: Users },
+    { name: 'Tasks', href: '/app/tasks', icon: CheckSquare },
+    { name: 'Audio Analyzer', href: '/app/audio', icon: Mic },
   ];
 
   return (

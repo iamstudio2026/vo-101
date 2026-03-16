@@ -34,10 +34,10 @@ export default function App() {
         <OfficeProvider>
           <Router>
             <Routes>
+              <Route path="/" element={<Landing />} />
               <Route path="/auth" element={<Auth />} />
-              <Route path="/landing" element={<Landing />} />
-              <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                <Route index element={<Navigate to="/landing" replace />} />
+              <Route path="/app" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+                <Route index element={<Navigate to="/app/dashboard" replace />} />
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="offices" element={<Offices />} />
                 <Route path="workers" element={<Workers />} />
@@ -45,6 +45,10 @@ export default function App() {
                 <Route path="audio" element={<AudioAnalyzer />} />
                 <Route path="miniverse" element={<Miniverse />} />
               </Route>
+              {/* Fallback for existing /landing links */}
+              <Route path="/landing" element={<Navigate to="/" replace />} />
+              {/* Redirect any other root level app paths to the new structure if needed, 
+                  but for now let's keep them as children of /app */}
             </Routes>
           </Router>
         </OfficeProvider>
