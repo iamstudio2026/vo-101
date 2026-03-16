@@ -365,7 +365,7 @@ export const Miniverse: React.FC = () => {
         ? `\n\nRELEVANT KNOWLEDGE BASE:\n${knowledge.map(k => `--- ${k.title} ---\n${k.content}`).join('\n\n')}`
         : '';
 
-      const model = worker.model || "gemini-1.5-flash";
+      const model = worker.model || "gemini-2.0-flash";
       const systemInstruction = `You are an AI agent named ${worker.name} working in a digital Virtual Office. 
         You have just completed a task titled: "${task.title}".
         ${task.description ? `Task description: ${task.description}` : ''}

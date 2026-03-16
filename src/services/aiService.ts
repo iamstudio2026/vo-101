@@ -21,7 +21,7 @@ export const generateFastResponse = async (prompt: string, systemInstruction?: s
 export const generateWorkerResponse = async (model: string, prompt: string, systemInstruction?: string) => {
   const ai = getAiClient();
   const response = await ai.models.generateContent({
-    model: model || "gemini-1.5-flash",
+    model: model || "gemini-2.0-flash",
     contents: prompt,
     config: { systemInstruction }
   });
