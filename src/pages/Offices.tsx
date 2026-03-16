@@ -4,7 +4,7 @@ import { useOffice } from '../context/OfficeContext';
 import { db, handleFirestoreError } from '../firebase';
 import { collection, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { Building2, Plus, Trash2, Edit2, X, Check } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { OperationType, Office } from '../types';
 
 export const Offices: React.FC = () => {

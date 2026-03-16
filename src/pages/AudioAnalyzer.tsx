@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Mic, Upload, FileAudio, Loader2, Save, CheckCircle2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { GoogleGenAI } from '@google/genai';
 import Markdown from 'react-markdown';
 import { useAuth } from '../context/AuthContext';

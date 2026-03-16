@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { loginWithGoogle } from '../firebase';
 import { Building2, ArrowRight } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 

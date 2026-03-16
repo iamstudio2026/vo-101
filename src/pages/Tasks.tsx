@@ -5,7 +5,7 @@ import { db, handleFirestoreError } from '../firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore';
 import { Task, Worker, OperationType } from '../types';
 import { CheckSquare, Plus, Trash2, Clock, CheckCircle2, Circle, Sparkles, Loader2, Wand2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { GoogleGenAI, Type } from '@google/genai';
 
 const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });

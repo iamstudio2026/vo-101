@@ -5,7 +5,7 @@ import { db, handleFirestoreError } from '../firebase';
 import { collection, query, where, onSnapshot, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { Worker, OperationType } from '../types';
 import { Users, Plus, Trash2, UserCircle, Edit2, X, Check } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export const Workers: React.FC = () => {
   const { currentUser } = useAuth();

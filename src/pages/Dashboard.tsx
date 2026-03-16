@@ -5,7 +5,7 @@ import { db } from '../firebase';
 import { collection, query, where, onSnapshot, limit, orderBy, updateDoc, doc } from 'firebase/firestore';
 import { Task, Worker, OperationType } from '../types';
 import { Building2, Users, CheckSquare, Clock, ArrowRight, Power, PowerOff } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { handleFirestoreError } from '../firebase';
 
