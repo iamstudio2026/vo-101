@@ -18,7 +18,7 @@ jobs:
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd ~/virtual-office
+            cd ~/vo-101
             git pull origin main
             # Make sure build variables are in .env on the server
             docker-compose up -d --build
