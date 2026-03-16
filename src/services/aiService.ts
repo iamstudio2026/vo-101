@@ -2,6 +2,7 @@ import { GoogleGenAI, ThinkingLevel, Modality, Type } from "@google/genai";
 import { AspectRatio } from "../types";
 
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+const openRouterKey = import.meta.env.VITE_OPENROUTER_API_KEY;
 
 export const getAiClient = () => {
   if (!apiKey) throw new Error("GEMINI_API_KEY is not defined");
@@ -38,15 +39,23 @@ export const generateFastResponse = async (prompt: string, systemInstruction?: s
 };
 
 export const generateWorkerResponse = async (model: string, prompt: string, systemInstruction?: string) => {
-  const ai = getAiClient();
-  return withRetry(async () => {
-    const response = await ai.models.generateContent({
-      model: model || "gemini-2.0-flash",
-      contents: prompt,
-      config: { systemInstruction }
+  // Routing logic: If it's a native Gemini model, use Google SDK.
+  // Otherwise, use OpenRouter for DeepSeek, Qwen, etc.
+  const isNativeGemini = model.startsWith('gemini-');
+  
+  if (isNativeGemini) {
+    const ai = getAiClient();
+    return withRetry(async () => {
+      const response = await ai.models.generateContent({
+        model: model || "gemini-2.0-flash",
+        contents: prompt,
+        config: { systemInstruction }
+      });
+      return response.text;
     });
-    return response.text;
-  });
+  } else {
+    return generateExternalResponse(model, prompt, systemInstruction);
+  }
 };
 
 export const generateThinkingResponse = async (prompt: string, systemInstruction?: string) => {
@@ -61,6 +70,32 @@ export const generateThinkingResponse = async (prompt: string, systemInstruction
       }
     });
     return response.text;
+  });
+};
+
+export const generateExternalResponse = async (model: string, prompt: string, systemInstruction?: string) => {
+  if (!openRouterKey) throw new Error("OPENROUTER_API_KEY is not defined");
+  
+  return withRetry(async () => {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${openRouterKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": window.location.origin,
+        "X-Title": "Virtual Office 101"
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          { role: "system", content: systemInstruction },
+          { role: "user", content: prompt }
+        ]
+      })
+    });
+    
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || "No response from model";
   });
 };
 

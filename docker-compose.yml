@@ -8,3 +8,4 @@ services:
     restart: always
     environment:
       - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
+      - VITE_OPENROUTER_API_KEY=${VITE_OPENROUTER_API_KEY}

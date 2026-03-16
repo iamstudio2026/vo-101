@@ -29,7 +29,11 @@ export const Workers: React.FC = () => {
   const AVAILABLE_MODELS = [
     { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Fast)' },
     { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (Smart)' },
-    { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Standard)' }
+    { id: 'deepseek/deepseek-chat', name: 'DeepSeek V3' },
+    { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1 (Reasoning)' },
+    { id: 'qwen/qwen-2.5-72b-instruct', name: 'Qwen 2.5 72B (KM 2.5)' },
+    { id: 'meta-llama/llama-3.1-405b-instruct', name: 'Llama 3.1 405B' },
+    { id: 'google/gemini-2.0-pro-exp-02-05:free', name: 'Gemini 2.0 Pro (Experimental)' }
   ];
 
   useEffect(() => {
