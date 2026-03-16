@@ -14,7 +14,8 @@ COPY . .
 
 # Build the application
 # Note: Ensure all VITE_ environment variables are available during build time
-RUN npm run build
+# Build the application
+RUN npm run build && ls -la /app/dist
 
 # Production stage
 FROM nginx:stable-alpine
@@ -22,8 +23,8 @@ FROM nginx:stable-alpine
 # Copy built assets from build stage
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Ensure correct permissions
-RUN chmod -R 755 /usr/share/nginx/html
+# Set broad permissions for web files
+RUN chmod -R 777 /usr/share/nginx/html
 
 # Copy custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
