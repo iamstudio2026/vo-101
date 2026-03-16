@@ -8,37 +8,60 @@ export const getAiClient = () => {
   return new GoogleGenAI({ apiKey });
 };
 
+// Helper for retrying AI calls with exponential backoff
+const withRetry = async <T>(fn: () => Promise<T>, retries = 3, delay = 2000): Promise<T> => {
+  try {
+    return await fn();
+  } catch (error: any) {
+    const errorString = error?.toString() || '';
+    const isRateLimit = errorString.includes('429') || errorString.includes('quota');
+    
+    if (isRateLimit && retries > 0) {
+      console.log(`Rate limit hit, retrying in ${delay}ms... (${retries} retries left)`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return withRetry(fn, retries - 1, delay * 2);
+    }
+    throw error;
+  }
+};
+
 export const generateFastResponse = async (prompt: string, systemInstruction?: string, modelOverride?: string) => {
   const ai = getAiClient();
-  const response = await ai.models.generateContent({
-    model: modelOverride || "gemini-3.1-flash-lite-preview",
-    contents: prompt,
-    config: { systemInstruction }
+  return withRetry(async () => {
+    const response = await ai.models.generateContent({
+      model: modelOverride || "gemini-3.1-flash-lite-preview",
+      contents: prompt,
+      config: { systemInstruction }
+    });
+    return response.text;
   });
-  return response.text;
 };
 
 export const generateWorkerResponse = async (model: string, prompt: string, systemInstruction?: string) => {
   const ai = getAiClient();
-  const response = await ai.models.generateContent({
-    model: model || "gemini-2.0-flash",
-    contents: prompt,
-    config: { systemInstruction }
+  return withRetry(async () => {
+    const response = await ai.models.generateContent({
+      model: model || "gemini-2.0-flash",
+      contents: prompt,
+      config: { systemInstruction }
+    });
+    return response.text;
   });
-  return response.text;
 };
 
 export const generateThinkingResponse = async (prompt: string, systemInstruction?: string) => {
   const ai = getAiClient();
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: prompt,
-    config: { 
-      systemInstruction,
-      thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH }
-    }
+  return withRetry(async () => {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+      config: { 
+        systemInstruction,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH }
+      }
+    });
+    return response.text;
   });
-  return response.text;
 };
 
 export const generateMapsResponse = async (prompt: string, lat?: number, lng?: number) => {
@@ -143,18 +166,20 @@ export const generateAudioAnalysis = async (base64Data: string, mimeType: string
 
 export const refineTaskWithAI = async (taskTitle: string) => {
   const ai = getAiClient();
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: `Translate and refine this task title into a professional, clear, and actionable set of instructions in English for an AI worker in a virtual office. 
-    Original Task: "${taskTitle}"
-    
-    Return a JSON object with:
-    {
-      "refinedTitle": "short clear title",
-      "refinedDescription": "detailed actionable instructions",
-      "suggestedDepartment": "archive|logic|oracle|sonic|optic|dispatch|forge|insight|vault"
-    }`,
-    config: { responseMimeType: "application/json" }
+  return withRetry(async () => {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `Translate and refine this task title into a professional, clear, and actionable set of instructions in English for an AI worker in a virtual office. 
+      Original Task: "${taskTitle}"
+      
+      Return a JSON object with:
+      {
+        "refinedTitle": "short clear title",
+        "refinedDescription": "detailed actionable instructions",
+        "suggestedDepartment": "archive|logic|oracle|sonic|optic|dispatch|forge|insight|vault"
+      }`,
+      config: { responseMimeType: "application/json" }
+    });
+    return JSON.parse(response.text || '{}');
   });
-  return JSON.parse(response.text || '{}');
 };
