@@ -1,0 +1,87 @@
+{
+  "entities": {
+    "Office": {
+      "title": "Office",
+      "description": "A virtual office space",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "ownerId", "createdAt"]
+    },
+    "Worker": {
+      "title": "Worker",
+      "description": "An AI agent citizen in the office",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "officeId": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "skills": { "type": "array", "items": { "type": "string" } },
+        "responsibilities": { "type": "string" },
+        "status": { "type": "string", "enum": ["available", "busy", "offline"] },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "officeId", "name", "role", "ownerId", "createdAt"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A task assigned to a worker",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "officeId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "assignedTo": { "type": "string" },
+        "status": { "type": "string", "enum": ["todo", "in-progress", "done", "archived"] },
+        "collected": { "type": "boolean" },
+        "result": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "officeId", "title", "status", "ownerId", "createdAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A group chat message",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "officeId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "message": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "type": { "type": "string", "enum": ["public", "private"] },
+        "receiverId": { "type": "string" },
+        "ownerId": { "type": "string" }
+      },
+      "required": ["id", "officeId", "senderId", "senderName", "message", "timestamp", "type", "ownerId"]
+    }
+  },
+  "firestore": {
+    "/offices/{officeId}": {
+      "schema": "Office",
+      "description": "Collection of virtual offices"
+    },
+    "/workers/{workerId}": {
+      "schema": "Worker",
+      "description": "Collection of AI agents"
+    },
+    "/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Collection of tasks"
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Collection of chat messages"
+    }
+  }
+}

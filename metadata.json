@@ -1,0 +1,7 @@
+{
+  "name": "Virtual Office",
+  "description": "Virtual office with digital twins, task automation, and audio analysis.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

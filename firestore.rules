@@ -1,0 +1,207 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - displayName: string (optional)
+    //   - photoURL: string (optional)
+    //   - createdAt: string (required)
+    //   - role: string (optional, default 'user')
+    //
+    // Collection: offices
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (required, size 1-100)
+    //   - description: string (optional, size 0-500)
+    //   - ownerId: string (required, matches auth.uid)
+    //   - createdAt: string (required)
+    //
+    // Collection: workers
+    // Document ID: auto-generated
+    // Fields:
+    //   - officeId: string (required)
+    //   - name: string (required, size 1-100)
+    //   - role: string (required, size 1-100)
+    //   - skills: list (optional, max 20 items)
+    //   - responsibilities: string (optional, size 0-1000)
+    //   - status: string (required, enum: available, busy, offline)
+    //   - ownerId: string (required, matches auth.uid)
+    //   - createdAt: string (required)
+    //
+    // Collection: tasks
+    // Document ID: auto-generated
+    // Fields:
+    //   - officeId: string (required)
+    //   - title: string (required, size 1-200)
+    //   - description: string (optional, size 0-2000)
+    //   - assignedTo: string (optional)
+    //   - status: string (required, enum: todo, in-progress, done, archived)
+    //   - collected: bool (optional)
+    //   - result: string (optional, size 0-10000)
+    //   - ownerId: string (required, matches auth.uid)
+    //   - createdAt: string (required)
+    //
+    // Collection: messages
+    // Document ID: auto-generated
+    // Fields:
+    //   - officeId: string (required)
+    //   - senderId: string (required)
+    //   - senderName: string (required)
+    //   - message: string (required, size 1-1000)
+    //   - timestamp: number (required)
+    //   - type: string (required, enum: public, private)
+    //   - receiverId: string (optional)
+    //   - ownerId: string (required, matches auth.uid)
+    //
+    // Collection: knowledge
+    // Document ID: auto-generated
+    // Fields:
+    //   - officeId: string (required)
+    //   - title: string (required, size 1-200)
+    //   - content: string (required, size 1-1000000) // Increased for base64 files
+    //   - type: string (required, enum: text, file, link, drive, notebooklm)
+    //   - fileName: string (optional)
+    //   - fileSize: number (optional)
+    //   - mimeType: string (optional)
+    //   - externalUrl: string (optional)
+    //   - ownerId: string (required, matches auth.uid)
+    //   - createdAt: string (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.ownerId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "phd.vicenternesto@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidString(val, min, max) {
+      return val is string && val.size() >= min && val.size() <= max;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             (!('role' in data) || data.role == 'user' || isAdmin());
+    }
+
+    function isValidOffice(data) {
+      return data.keys().hasAll(['name', 'ownerId', 'createdAt']) &&
+             isValidString(data.name, 1, 100) &&
+             (!('description' in data) || isValidString(data.description, 0, 500)) &&
+             data.ownerId == request.auth.uid;
+    }
+
+    function isValidWorker(data) {
+      return data.keys().hasAll(['officeId', 'name', 'role', 'status', 'ownerId', 'createdAt']) &&
+             isValidString(data.name, 1, 100) &&
+             isValidString(data.role, 1, 100) &&
+             data.status in ['available', 'busy', 'offline'] &&
+             data.ownerId == request.auth.uid;
+    }
+
+    function isValidTask(data) {
+      return data.keys().hasAll(['officeId', 'title', 'status', 'ownerId', 'createdAt']) &&
+             isValidString(data.title, 1, 200) &&
+             data.status in ['todo', 'in-progress', 'done', 'archived'] &&
+             data.ownerId == request.auth.uid;
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['officeId', 'senderId', 'senderName', 'message', 'timestamp', 'type', 'ownerId']) &&
+             isValidString(data.message, 1, 1000) &&
+             data.type in ['public', 'private'] &&
+             data.ownerId == request.auth.uid;
+    }
+
+    function isValidKnowledge(data) {
+      return data.keys().hasAll(['officeId', 'title', 'content', 'type', 'ownerId', 'createdAt']) &&
+             isValidString(data.title, 1, 200) &&
+             isValidString(data.content, 1, 1000000) &&
+             data.type in ['text', 'file', 'link', 'drive', 'notebooklm'] &&
+             data.ownerId == request.auth.uid;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      (request.resource.data.role == resource.data.role || isAdmin());
+    }
+
+    match /offices/{officeId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidOffice(request.resource.data);
+      allow update: if isDocOwner() && isValidOffice(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /workers/{workerId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidWorker(request.resource.data);
+      allow update: if isDocOwner() && isValidWorker(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /tasks/{taskId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidTask(request.resource.data);
+      allow update: if isDocOwner() && isValidTask(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /messages/{messageId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidMessage(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /knowledge/{knowledgeId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidKnowledge(request.resource.data);
+      allow update: if isDocOwner() && isValidKnowledge(request.resource.data);
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
