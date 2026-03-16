@@ -21,5 +21,9 @@ jobs:
             cd ~/vo-101
             git fetch --all
             git reset --hard origin/main
+            # Stop host Nginx if it's running and taking port 80
+            sudo systemctl stop nginx || true
+            sudo systemctl disable nginx || true
+            docker-compose down
             docker-compose up -d --build
             docker system prune -f
