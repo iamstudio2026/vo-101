@@ -15,7 +15,7 @@ export const Workers: React.FC = () => {
   const [role, setRole] = useState('');
   const [skills, setSkills] = useState('');
   const [responsibilities, setResponsibilities] = useState('');
-  const [model, setModel] = useState('gemini-1.5-flash');
+  const [model, setModel] = useState('gemini-2.0-flash');
   const [isEnabled, setIsEnabled] = useState(true);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -23,7 +23,7 @@ export const Workers: React.FC = () => {
   const [editRole, setEditRole] = useState('');
   const [editSkills, setEditSkills] = useState('');
   const [editResponsibilities, setEditResponsibilities] = useState('');
-  const [editModel, setEditModel] = useState('gemini-1.5-flash');
+  const [editModel, setEditModel] = useState('gemini-2.0-flash');
   const [editIsEnabled, setEditIsEnabled] = useState(true);
 
   const AVAILABLE_MODELS = [
@@ -76,7 +76,7 @@ export const Workers: React.FC = () => {
       setRole('');
       setSkills('');
       setResponsibilities('');
-      setModel('gemini-1.5-flash');
+      setModel('gemini-2.0-flash');
       setIsEnabled(true);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'workers');
@@ -91,7 +91,7 @@ export const Workers: React.FC = () => {
     setEditRole(worker.role);
     setEditSkills(worker.skills?.join(', ') || '');
     setEditResponsibilities(worker.responsibilities || '');
-    setEditModel(worker.model || 'gemini-1.5-flash');
+    setEditModel(worker.model || 'gemini-2.0-flash');
     setEditIsEnabled(worker.isEnabled !== false);
   };
 
