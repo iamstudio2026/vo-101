@@ -2,7 +2,11 @@ version: '3.8'
 
 services:
   app:
-    build: .
+    build: 
+      context: .
+      args:
+        - VITE_OPENROUTER_API_KEY=${VITE_OPENROUTER_API_KEY}
+        - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
     ports:
       - "80:80"
     restart: always

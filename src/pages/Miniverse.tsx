@@ -23,19 +23,19 @@ const WORLD_WIDTH = 20;
 const WORLD_HEIGHT = 15;
 
 const OFFICE_AREAS = [
-  { id: 'archive', name: 'La Bibliosfera', description: 'Archive of Truth. Donde el conocimiento se preserva y organiza para la eternidad.', x: 0, y: 0, w: 4, h: 4, color: 'bg-slate-500/5', border: 'border-slate-200/50', text: 'text-slate-500', icon: BookOpen },
-  { id: 'logic', name: 'La Forja de Algoritmos', description: 'Logic Engine. El corazón computacional donde se diseñan scripts y se optimizan procesos.', x: 4, y: 0, w: 4, h: 4, color: 'bg-cyan-500/5', border: 'border-cyan-200/50', text: 'text-cyan-600', icon: Code },
-  { id: 'oracle', name: 'El Faro de Información', description: 'The Oracle. Terminal central de búsqueda y recolección de datos externos.', x: 8, y: 0, w: 4, h: 4, color: 'bg-indigo-500/5', border: 'border-indigo-200/50', text: 'text-indigo-600', icon: Search },
-  { id: 'bistro', name: 'Bit & Byte Bistro', description: 'Cafetería. El punto de encuentro para la recarga de energía y el intercambio informal.', x: 16, y: 0, w: 4, h: 4, color: 'bg-amber-500/5', border: 'border-amber-200/50', text: 'text-amber-700', icon: Coffee },
+  { id: 'archive', name: 'La Bibliosfera', description: 'Archivo de la Verdad. El núcleo central donde la información se categoriza y destila en conocimiento puro.', x: 0, y: 0, w: 4, h: 4, color: 'bg-slate-500/5', border: 'border-slate-200/50', text: 'text-slate-500', icon: BookOpen },
+  { id: 'logic', name: 'La Forja de Algoritmos', description: 'Motor Lógico. Aquí es donde los procesos se optimizan, el código se refina y la lógica computacional cobra vida.', x: 4, y: 0, w: 4, h: 4, color: 'bg-cyan-500/5', border: 'border-cyan-200/50', text: 'text-cyan-600', icon: Code },
+  { id: 'oracle', name: 'El Faro de Información', description: 'El Oráculo. Una terminal circular de búsqueda constante que ilumina los datos externos para integrarlos al sistema.', x: 8, y: 0, w: 4, h: 4, color: 'bg-indigo-500/5', border: 'border-indigo-200/50', text: 'text-indigo-600', icon: Search },
+  { id: 'bistro', name: 'Bit & Byte Bistro', description: 'Centro de Sincronía. Un espacio inmersivo para la recarga energética y la colaboración informal entre agentes.', x: 16, y: 0, w: 4, h: 4, color: 'bg-amber-500/5', border: 'border-amber-200/50', text: 'text-amber-700', icon: Coffee },
   
-  { id: 'optic', name: 'Pabellón de Renderizado', description: 'The Optic Studio. Espacio dedicado a la disección, mejora y creación de estética visual.', x: 0, y: 5, w: 4, h: 4, color: 'bg-purple-500/5', border: 'border-purple-200/50', text: 'text-purple-600', icon: ImageIcon },
-  { id: 'sonic', name: 'Laboratorio de Resonancia', description: 'The Sonic Lab. Entorno insonorizado para el procesamiento de audio y transformación de voz.', x: 8, y: 5, w: 4, h: 4, color: 'bg-blue-500/5', border: 'border-blue-200/50', text: 'text-blue-600', icon: Mic },
-  { id: 'dispatch', name: 'El Centro de Despacho', description: 'Dispatch Hub. La central de comunicaciones y entrega de reportes terminados.', x: 16, y: 5, w: 4, h: 5, color: 'bg-emerald-500/5', border: 'border-emerald-200/50', text: 'text-emerald-600', icon: Send },
+  { id: 'optic', name: 'Pabellón de Renderizado', description: 'Optic Studio. Los agentes diseccionan y mejoran la estética visual para crear interfaces y arte de vanguardia.', x: 0, y: 5, w: 4, h: 4, color: 'bg-purple-500/5', border: 'border-purple-200/50', text: 'text-purple-600', icon: ImageIcon },
+  { id: 'sonic', name: 'Laboratorio de Resonancia', description: 'Sonic Lab. Paneles de ondas de luz insonorizados donde se procesa audio y se transforman frecuencias en texto.', x: 8, y: 5, w: 4, h: 4, color: 'bg-blue-500/5', border: 'border-blue-200/50', text: 'text-blue-600', icon: Mic },
+  { id: 'dispatch', name: 'Centro de Despacho', description: 'Hub de Distribución. La central logística encargada de enviar los resultados procesados al mundo exterior.', x: 16, y: 5, w: 4, h: 5, color: 'bg-emerald-500/5', border: 'border-emerald-200/50', text: 'text-emerald-600', icon: Send },
   
-  { id: 'forge', name: 'La Fragua Creativa', description: 'Creative Forge. Donde las ideas se transforman en contenido escrito y narrativas.', x: 0, y: 10, w: 4, h: 5, color: 'bg-rose-500/5', border: 'border-rose-200/50', text: 'text-rose-600', icon: PenTool },
-  { id: 'zen', name: 'The Kinetic Zen Zone', description: 'Patio de Recarga. Espacio de meditación y balance para optimizar el rendimiento neuronal.', x: 4, y: 10, w: 4, h: 5, color: 'bg-green-500/5', border: 'border-green-200/50', text: 'text-green-600', icon: Sun },
-  { id: 'insight', name: 'La Cámara de Revelaciones', description: 'Insight Chamber. Analítica avanzada donde los datos se convierten en proyecciones futuras.', x: 9, y: 10, w: 6, h: 5, color: 'bg-orange-500/5', border: 'border-orange-200/50', text: 'text-orange-600', icon: BarChart3 },
-  { id: 'vault', name: 'El Depósito de Activos', description: 'The Vault. Estanterías infinitas donde se recolectan y etiquetan los insumos brutos.', x: 16, y: 11, w: 4, h: 4, color: 'bg-amber-600/5', border: 'border-amber-300/50', text: 'text-amber-800', icon: Database },
+  { id: 'forge', name: 'La Fragua Creativa', description: 'Creative Forge. El taller de narrativa donde las ideas se funden en informes detallados y contenido persuasivo.', x: 0, y: 10, w: 4, h: 5, color: 'bg-rose-500/5', border: 'border-rose-200/50', text: 'text-rose-600', icon: PenTool },
+  { id: 'zen', name: 'Kinetic Zen Zone', description: 'Jardín Fractal. Un entorno de meditación digital para balancear los estados cognitivos de la red neuronal.', x: 4, y: 10, w: 4, h: 5, color: 'bg-green-500/5', border: 'border-green-200/50', text: 'text-green-600', icon: Sun },
+  { id: 'insight', name: 'Cámara de Revelaciones', description: 'Insight Chamber. Terminales analíticas que proyectan tendencias y detectan anomalías en el flujo de datos.', x: 9, y: 10, w: 6, h: 5, color: 'bg-orange-500/5', border: 'border-orange-200/50', text: 'text-orange-600', icon: BarChart3 },
+  { id: 'vault', name: 'El Depósito de Activos', description: 'The Vault. Entorno de estanterías infinitas de datos donde se recolectan y clasifican los insumos brutos.', x: 16, y: 11, w: 4, h: 4, color: 'bg-amber-600/5', border: 'border-amber-300/50', text: 'text-amber-800', icon: Database },
 ];
 
 const WORK_AREA = { x: 4, y: 1, width: 2, height: 2 }; // Nested in Logic Engine
@@ -1222,6 +1222,7 @@ export const Miniverse: React.FC = () => {
             {/* Areas */}
             {OFFICE_AREAS.map(area => {
               const Icon = area.icon;
+              const isSelected = selectedCitizen && getTaskDepartment('', '') === area.id;
               return (
                 <div
                   key={area.id}
@@ -1232,14 +1233,27 @@ export const Miniverse: React.FC = () => {
                     width: area.w * gridSize,
                     height: area.h * gridSize,
                   }}
-                  className={`border-2 border-dashed ${area.color} ${area.border} rounded-2xl flex flex-col items-center justify-center group overflow-hidden transition-all duration-300 pointer-events-none`}
+                  className={`border border-white/20 ${area.color} rounded-2xl flex flex-col items-center justify-center group overflow-hidden transition-all duration-500 pointer-events-none backdrop-blur-[1px] hover:backdrop-blur-[4px] hover:shadow-2xl hover:shadow-${area.text.split('-')[1]}-500/20`}
                 >
-                  <Icon className={`w-8 h-8 mb-1 opacity-10 group-hover:opacity-100 transition-opacity ${area.text}`} />
-                  <span className={`text-[8px] font-bold uppercase tracking-widest ${area.text} opacity-20 group-hover:opacity-100 text-center px-1`}>{area.name}</span>
-                  <span className="text-[6px] text-slate-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-1 text-center w-full">{area.description}</span>
+                  {/* Background Aura */}
+                  <div className={`absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity duration-700 bg-gradient-to-br from-white via-transparent to-black`} />
+                  
+                  <div className="relative z-10 flex flex-col items-center justify-center p-2 text-center">
+                    <Icon className={`w-8 h-8 mb-2 transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 ${area.text} opacity-20 group-hover:opacity-100`} />
+                    <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${area.text} opacity-30 group-hover:opacity-100 transition-all duration-500 leading-tight`}>
+                      {area.name}
+                    </span>
+                    <p className="text-[7px] text-slate-500 font-medium leading-relaxed mt-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-500 max-w-[80%] mx-auto">
+                      {area.description}
+                    </p>
+                  </div>
+                  
+                  {/* Corner Accents */}
+                  <div className={`absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 ${area.border} opacity-0 group-hover:opacity-40 transition-opacity`} />
+                  <div className={`absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 ${area.border} opacity-0 group-hover:opacity-40 transition-opacity`} />
                   
                   {/* Interaction Overlays */}
-                  <div className="absolute inset-0 pointer-events-auto flex items-center justify-center cursor-default">
+                  <div className="absolute inset-0 pointer-events-auto flex items-center justify-center cursor-default z-20">
                     {area.id === 'vault' && (
                       <button 
                         className="w-full h-full cursor-pointer opacity-0"
@@ -1265,8 +1279,9 @@ export const Miniverse: React.FC = () => {
 
                   {/* Vault Item Counter */}
                   {area.id === 'vault' && tasks.filter(t => t.status === 'done' && !t.collected).length > 0 && (
-                    <div className="absolute top-2 right-2 pointer-events-none">
-                       <span className="bg-amber-500 text-white text-[8px] px-1.5 py-0.5 rounded-full animate-bounce shadow-lg">
+                    <div className="absolute top-3 right-3 pointer-events-none z-30">
+                       <span className="bg-amber-500 text-white text-[9px] font-black px-2 py-1 rounded-lg animate-bounce shadow-xl flex items-center gap-1">
+                        <Package className="w-2 h-2" />
                         {tasks.filter(t => t.status === 'done' && !t.collected).length}
                       </span>
                     </div>
@@ -1504,7 +1519,49 @@ export const Miniverse: React.FC = () => {
                 </motion.div>
               ))}
             </div>
-        </div>
+
+            {/* Simulation Status Bar */}
+            <div className="absolute bottom-4 left-4 right-4 h-10 bg-slate-900/90 backdrop-blur-md rounded-xl border border-white/10 shadow-2xl flex items-center justify-between px-4 z-40">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]" />
+                  <span className="text-[10px] font-black text-white/50 uppercase tracking-widest">System Live</span>
+                </div>
+                <div className="h-4 w-px bg-white/10" />
+                <div className="flex items-center gap-3">
+                  <div className="flex flex-col">
+                    <span className="text-[7px] text-white/30 uppercase font-bold leading-none">Neural Sync</span>
+                    <span className="text-[10px] text-white font-mono">98.4%</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[7px] text-white/30 uppercase font-bold leading-none">Agents</span>
+                    <span className="text-[10px] text-white font-mono">{citizens.length}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[7px] text-white/30 uppercase font-bold leading-none">Power</span>
+                    <span className="text-[10px] text-indigo-400 font-mono">Optimized</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <div className="flex -space-x-2">
+                  {citizens.map((citizen, i) => (
+                    <div 
+                      key={citizen.id} 
+                      className="w-6 h-6 rounded-full border-2 border-slate-900 bg-slate-800 flex items-center justify-center overflow-hidden"
+                      title={citizen.name}
+                    >
+                      <User className="w-3 h-3 text-white/50" />
+                    </div>
+                  ))}
+                </div>
+                <div className="text-[9px] font-bold text-white/40 italic">
+                  Neural Headquarters v2.1.0
+                </div>
+              </div>
+            </div>
+          </div>
 
         {/* Sidebar Info */}
         <div className="w-80 flex flex-col gap-4 overflow-hidden h-full">
@@ -1884,7 +1941,7 @@ export const Miniverse: React.FC = () => {
                     <FileText className="w-6 h-6 text-indigo-600" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-slate-900">{viewingTaskResult.title}</h2>
+                    <h2 className="text-xl font-bold text-slate-900">{viewingTaskResult?.title}</h2>
                     <p className="text-xs text-indigo-600 font-medium uppercase tracking-wider">Work Output</p>
                   </div>
                 </div>
@@ -1903,14 +1960,14 @@ export const Miniverse: React.FC = () => {
                       <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-2" />
                       <p className="text-xs font-bold text-slate-500 animate-pulse">Agent is processing data...</p>
                     </div>
-                  ) : viewingTaskResult.result ? (
+                  ) : viewingTaskResult?.result ? (
                     viewingTaskResult.result
                   ) : (
                     <div className="flex flex-col items-center justify-center h-full py-12 text-center">
                       <Brain className="w-12 h-12 text-slate-200 mb-4" />
                       <p className="text-slate-400 mb-6">No content generated for this task yet.</p>
                       <button
-                        onClick={() => processTaskWithAI(viewingTaskResult)}
+                        onClick={() => viewingTaskResult && processTaskWithAI(viewingTaskResult)}
                         className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20"
                       >
                         <Sparkles className="w-4 h-4" />
@@ -1923,18 +1980,18 @@ export const Miniverse: React.FC = () => {
                 <div className="mt-6 flex gap-3">
                   <button
                     onClick={() => {
-                      if (viewingTaskResult.result) {
+                      if (viewingTaskResult?.result) {
                         navigator.clipboard.writeText(viewingTaskResult.result);
                       }
                     }}
-                    disabled={!viewingTaskResult.result || isGenerating}
+                    disabled={!viewingTaskResult?.result || isGenerating}
                     className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-200 transition-all disabled:opacity-50"
                   >
                     <ClipboardCheck className="w-4 h-4" />
                     Copy Content
                   </button>
                   <button
-                    disabled={!viewingTaskResult.result || isGenerating}
+                    disabled={!viewingTaskResult?.result || isGenerating}
                     className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50"
                   >
                     <Download className="w-4 h-4" />

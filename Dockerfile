@@ -14,6 +14,11 @@ COPY . .
 
 # Build the application
 # Note: Ensure all VITE_ environment variables are available during build time
+ARG VITE_OPENROUTER_API_KEY
+ARG VITE_GEMINI_API_KEY
+ENV VITE_OPENROUTER_API_KEY=$VITE_OPENROUTER_API_KEY
+ENV VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
+
 # Build the application
 RUN npm run build && ls -la /app/dist
 

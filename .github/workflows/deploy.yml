@@ -25,7 +25,9 @@ jobs:
             sudo systemctl stop nginx || true
             sudo systemctl disable nginx || true
             docker-compose down
-            docker-compose up -d --build
+            # Create a temporary .env for the build if needed, or pass via build-args
+            docker-compose build --build-arg VITE_OPENROUTER_API_KEY=${{ secrets.VITE_OPENROUTER_API_KEY }} --build-arg VITE_GEMINI_API_KEY=${{ secrets.VITE_GEMINI_API_KEY }}
+            docker-compose up -d
             docker ps
             docker logs --tail 20 vo-101-app-1 || true
             docker system prune -f
