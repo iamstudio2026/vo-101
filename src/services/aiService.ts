@@ -140,3 +140,21 @@ export const generateAudioAnalysis = async (base64Data: string, mimeType: string
   });
   return response.text;
 };
+
+export const refineTaskWithAI = async (taskTitle: string) => {
+  const ai = getAiClient();
+  const response = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: `Translate and refine this task title into a professional, clear, and actionable set of instructions in English for an AI worker in a virtual office. 
+    Original Task: "${taskTitle}"
+    
+    Return a JSON object with:
+    {
+      "refinedTitle": "short clear title",
+      "refinedDescription": "detailed actionable instructions",
+      "suggestedDepartment": "archive|logic|oracle|sonic|optic|dispatch|forge|insight|vault"
+    }`,
+    config: { responseMimeType: "application/json" }
+  });
+  return JSON.parse(response.text || '{}');
+};

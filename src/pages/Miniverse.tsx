@@ -14,7 +14,7 @@ declare global {
 }
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Monitor, Coffee, MessageSquare, Brain, AlertCircle, User, CheckSquare, ListTodo, Play, CheckCircle2, Package, X, ArrowRight, Archive, FileText, ExternalLink, Download, ClipboardCheck, Loader2, Sparkles, Terminal, Code, Cpu, Zap, Github, BookOpen, Image as ImageIcon, MapPin, Volume2, VolumeX, Send, Wand2 as WandIcon, Book, Plus, Trash2, Users, File, Link, HardDrive, Share2, Upload, Eye, Accessibility, Hand, Mic, FileAudio } from 'lucide-react';
+import { Monitor, Coffee, MessageSquare, Brain, AlertCircle, User, CheckSquare, ListTodo, Play, CheckCircle2, Package, X, ArrowRight, Archive, FileText, ExternalLink, Download, ClipboardCheck, Loader2, Sparkles, Terminal, Code, Cpu, Zap, Github, BookOpen, Image as ImageIcon, MapPin, Volume2, VolumeX, Send, Wand2 as WandIcon, Book, Plus, Trash2, Users, File, Link, HardDrive, Share2, Upload, Eye, Accessibility, Hand, Mic, FileAudio, Search, PenTool, BarChart3, Sun, Database, Mail, Layers } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import Markdown from 'react-markdown';
 import * as aiService from '../services/aiService';
@@ -22,18 +22,60 @@ import * as aiService from '../services/aiService';
 const WORLD_WIDTH = 20;
 const WORLD_HEIGHT = 15;
 
-const WORK_AREA = { x: 2, y: 2, width: 4, height: 4 };
-const STORAGE_AREA = { x: 14, y: 9, width: 4, height: 4 };
-const BREAK_AREA = { x: 14, y: 2, width: 4, height: 4 };
-const VISION_AREA = { x: 2, y: 9, width: 4, height: 4 };
-const AUDIO_AREA = { x: 8, y: 5, width: 4, height: 4 };
+const OFFICE_AREAS = [
+  { id: 'archive', name: 'La Bibliosfera', description: 'Archive of Truth. Donde el conocimiento se preserva y organiza para la eternidad.', x: 0, y: 0, w: 4, h: 4, color: 'bg-slate-500/5', border: 'border-slate-200/50', text: 'text-slate-500', icon: BookOpen },
+  { id: 'logic', name: 'La Forja de Algoritmos', description: 'Logic Engine. El corazón computacional donde se diseñan scripts y se optimizan procesos.', x: 4, y: 0, w: 4, h: 4, color: 'bg-cyan-500/5', border: 'border-cyan-200/50', text: 'text-cyan-600', icon: Code },
+  { id: 'oracle', name: 'El Faro de Información', description: 'The Oracle. Terminal central de búsqueda y recolección de datos externos.', x: 8, y: 0, w: 4, h: 4, color: 'bg-indigo-500/5', border: 'border-indigo-200/50', text: 'text-indigo-600', icon: Search },
+  { id: 'bistro', name: 'Bit & Byte Bistro', description: 'Cafetería. El punto de encuentro para la recarga de energía y el intercambio informal.', x: 16, y: 0, w: 4, h: 4, color: 'bg-amber-500/5', border: 'border-amber-200/50', text: 'text-amber-700', icon: Coffee },
+  
+  { id: 'optic', name: 'Pabellón de Renderizado', description: 'The Optic Studio. Espacio dedicado a la disección, mejora y creación de estética visual.', x: 0, y: 5, w: 4, h: 4, color: 'bg-purple-500/5', border: 'border-purple-200/50', text: 'text-purple-600', icon: ImageIcon },
+  { id: 'sonic', name: 'Laboratorio de Resonancia', description: 'The Sonic Lab. Entorno insonorizado para el procesamiento de audio y transformación de voz.', x: 8, y: 5, w: 4, h: 4, color: 'bg-blue-500/5', border: 'border-blue-200/50', text: 'text-blue-600', icon: Mic },
+  { id: 'dispatch', name: 'El Centro de Despacho', description: 'Dispatch Hub. La central de comunicaciones y entrega de reportes terminados.', x: 16, y: 5, w: 4, h: 5, color: 'bg-emerald-500/5', border: 'border-emerald-200/50', text: 'text-emerald-600', icon: Send },
+  
+  { id: 'forge', name: 'La Fragua Creativa', description: 'Creative Forge. Donde las ideas se transforman en contenido escrito y narrativas.', x: 0, y: 10, w: 4, h: 5, color: 'bg-rose-500/5', border: 'border-rose-200/50', text: 'text-rose-600', icon: PenTool },
+  { id: 'zen', name: 'The Kinetic Zen Zone', description: 'Patio de Recarga. Espacio de meditación y balance para optimizar el rendimiento neuronal.', x: 4, y: 10, w: 4, h: 5, color: 'bg-green-500/5', border: 'border-green-200/50', text: 'text-green-600', icon: Sun },
+  { id: 'insight', name: 'La Cámara de Revelaciones', description: 'Insight Chamber. Analítica avanzada donde los datos se convierten en proyecciones futuras.', x: 9, y: 10, w: 6, h: 5, color: 'bg-orange-500/5', border: 'border-orange-200/50', text: 'text-orange-600', icon: BarChart3 },
+  { id: 'vault', name: 'El Depósito de Activos', description: 'The Vault. Estanterías infinitas donde se recolectan y etiquetan los insumos brutos.', x: 16, y: 11, w: 4, h: 4, color: 'bg-amber-600/5', border: 'border-amber-300/50', text: 'text-amber-800', icon: Database },
+];
+
+const WORK_AREA = { x: 4, y: 1, width: 2, height: 2 }; // Nested in Logic Engine
+const STORAGE_AREA = { x: 17, y: 12, width: 2, height: 2 }; // Nested in Vault
+const BREAK_AREA = { x: 16, y: 0, width: 4, height: 4 }; // Bistro
+const VISION_AREA = { x: 0, y: 5, width: 4, height: 4 }; // Optic Studio
+const AUDIO_AREA = { x: 8, y: 5, width: 4, height: 4 }; // Sonic Lab
+
+const getTaskDepartment = (taskTitle: string, taskDesc: string = ""): string => {
+  const text = (taskTitle + " " + taskDesc).toLowerCase();
+  
+  if (text.includes('audio') || text.includes('voz') || text.includes('sonido') || text.includes('mic')) return 'sonic';
+  if (text.includes('imagen') || text.includes('foto') || text.includes('video') || text.includes('diseño') || text.includes('optic')) return 'optic';
+  if (text.includes('code') || text.includes('program') || text.includes('bug') || text.includes('script') || text.includes('logic')) return 'logic';
+  if (text.includes('search') || text.includes('buscar') || text.includes('investigar') || text.includes('oracle')) return 'oracle';
+  if (text.includes('insight') || text.includes('analizar') || text.includes('stats') || text.includes('estadística')) return 'insight';
+  if (text.includes('creative') || text.includes('escribir') || text.includes('write') || text.includes('content') || text.includes('forge')) return 'forge';
+  if (text.includes('book') || text.includes('library') || text.includes('archivo') || text.includes('bibliosfera')) return 'archive';
+  if (text.includes('send') || text.includes('mail') || text.includes('dispatch') || text.includes('correo')) return 'dispatch';
+  if (text.includes('vault') || text.includes('depósito') || text.includes('storage')) return 'vault';
+  
+  return 'logic'; // Default to Logic Engine
+};
+
+const getDepartmentArea = (deptId: string) => {
+  const area = OFFICE_AREAS.find(a => a.id === deptId) || OFFICE_AREAS[1];
+  return { 
+    x: area.x + 1, 
+    y: area.y + 1, 
+    width: area.w - 2, 
+    height: area.h - 2 
+  };
+};
 
 const FURNITURE = [
-  { id: 'f1', name: 'Coffee Machine', x: 16, y: 3, icon: Coffee },
-  { id: 'f2', name: 'Server Rack', x: 3, y: 10, icon: Cpu },
-  { id: 'f3', name: 'Plant', x: 1, y: 1, icon: Sparkles },
-  { id: 'f4', name: 'Whiteboard', x: 18, y: 13, icon: ClipboardCheck },
-  { id: 'f5', name: 'Water Cooler', x: 12, y: 1, icon: Coffee },
+  { id: 'f1', name: 'Coffee Machine', x: 18, y: 1, icon: Coffee },
+  { id: 'f2', name: 'Server Rack', x: 5, y: 1, icon: Cpu },
+  { id: 'f3', name: 'Main Terminal', x: 10, y: 1, icon: Terminal },
+  { id: 'f4', name: 'Drafting Table', x: 1, y: 12, icon: ClipboardCheck },
+  { id: 'f5', name: 'Digital Canvas', x: 1, y: 7, icon: Layers },
 ];
 
 const CHAT_PROXIMITY = 1.2; // Distance to trigger chat
@@ -56,6 +98,10 @@ export const Miniverse: React.FC = () => {
   const [worldPrompt, setWorldPrompt] = useState('');
   const [showVisionModal, setShowVisionModal] = useState(false);
   const [showAudioModal, setShowAudioModal] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<'citizens' | 'tasks'>('citizens');
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [isRefiningTask, setIsRefiningTask] = useState(false);
+  const [isUpdatingOffice, setIsUpdatingOffice] = useState(false);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [isAnalyzingAudio, setIsAnalyzingAudio] = useState(false);
   const [audioSummary, setAudioSummary] = useState('');
@@ -622,29 +668,50 @@ export const Miniverse: React.FC = () => {
           // If citizen is idle and not assigned work, check for tasks assigned to them in Firestore
           if (c.currentAction === 'idle' && !c.isAssignedWork) {
             const taskToStart = (tasksRef.current || []).find(t => 
-              t.assignedTo === c.id && 
-              (t.status === 'todo' || t.status === 'in-progress')
+              (t.assignedTo === c.id || (!t.assignedTo && t.status === 'pending')) && 
+              (t.status === 'todo' || t.status === 'pending' || t.status === 'in-progress')
             );
 
             if (taskToStart) {
+              const deptId = getTaskDepartment(taskToStart.title, taskToStart.description);
+              const targetDept = getDepartmentArea(deptId);
+              
               c.isAssignedWork = true;
               c.workProgress = 0;
               c.hasProduct = false;
               c.currentTaskId = taskToStart.id;
+              c.currentAction = 'thinking'; // Set to 'Analizando' first
               
-              // Move to Work Area
-              c.targetX = WORK_AREA.x + Math.random() * (WORK_AREA.width - 1);
-              c.targetY = WORK_AREA.y + Math.random() * (WORK_AREA.height - 1);
-              c.currentAction = 'walking';
-
-              // If it was 'todo', mark it as 'in-progress' in Firestore
-              if (taskToStart.status === 'todo') {
-                updateDoc(doc(db, 'tasks', taskToStart.id), { status: 'in-progress' }).catch(console.error);
-                // Also trigger AI Generation immediately so it's ready when they finish
+              // Move to the specific department for this task
+              c.targetX = targetDept.x + Math.random() * targetDept.width;
+              c.targetY = targetDept.y + Math.random() * targetDept.height;
+              
+              // If it was 'pending' or 'todo', claim it and mark as 'in-progress'
+              if (taskToStart.status === 'pending' || taskToStart.status === 'todo') {
+                updateDoc(doc(db, 'tasks', taskToStart.id), { 
+                  status: 'in-progress',
+                  assignedTo: c.id
+                }).catch(console.error);
+                
+                // Start AI generation
                 generateAIResult(taskToStart, c).then(async (result) => {
                   await updateDoc(doc(db, 'tasks', taskToStart.id), { result });
                 }).catch(console.error);
               }
+              
+              // Set a short timer to switch from thinking to walking
+              c.idleActionTimer = 15; 
+              continue;
+            }
+          }
+
+          // Handle 'thinking' state before moving
+          if (c.currentAction === 'thinking' && c.isAssignedWork) {
+            if (c.idleActionTimer && c.idleActionTimer > 0) {
+              c.idleActionTimer--;
+              continue;
+            } else {
+              c.currentAction = 'walking';
             }
           }
 
@@ -674,14 +741,19 @@ export const Miniverse: React.FC = () => {
           // Work Assignment Logic
           if (c.isAssignedWork) {
             if (!c.hasProduct) {
-              // Move to Work Area
-              const inWorkArea = c.x >= WORK_AREA.x && c.x <= WORK_AREA.x + WORK_AREA.width &&
-                               c.y >= WORK_AREA.y && c.y <= WORK_AREA.y + WORK_AREA.height;
+              const taskToStart = (tasksRef.current || []).find(t => t.id === c.currentTaskId);
+              const deptId = taskToStart ? getTaskDepartment(taskToStart.title, taskToStart.description) : 'logic';
+              const targetDept = getDepartmentArea(deptId);
+
+              const inWorkArea = c.x >= targetDept.x && c.x <= targetDept.x + targetDept.width &&
+                               c.y >= targetDept.y && c.y <= targetDept.y + targetDept.height;
               
               if (!inWorkArea) {
-                c.targetX = WORK_AREA.x + WORK_AREA.width / 2;
-                c.targetY = WORK_AREA.y + WORK_AREA.height / 2;
-                c.currentAction = 'walking';
+                if (c.currentAction !== 'walking') {
+                  c.targetX = targetDept.x + targetDept.width / 2;
+                  c.targetY = targetDept.y + targetDept.height / 2;
+                  c.currentAction = 'walking';
+                }
               } else {
                 c.currentAction = 'working';
                 c.workProgress = (c.workProgress || 0) + 1;
@@ -920,6 +992,52 @@ export const Miniverse: React.FC = () => {
     }
   };
 
+  const handleRefineTask = async () => {
+    if (!newTaskTitle.trim() || isRefiningTask || !currentOffice || !currentUser) return;
+    setIsRefiningTask(true);
+    try {
+      const refined = await aiService.refineTaskWithAI(newTaskTitle);
+      
+      const taskData = {
+        title: refined.refinedTitle || newTaskTitle,
+        description: refined.refinedDescription || '',
+        status: 'pending' as const,
+        officeId: currentOffice.id,
+        ownerId: currentUser.uid,
+        createdAt: new Date().toISOString()
+      };
+
+      await addDoc(collection(db, 'tasks'), taskData);
+      setNewTaskTitle('');
+      setSidebarTab('tasks');
+    } catch (e) {
+      console.error("Refinement error:", e);
+      // Fallback: create simple task
+      handleCreateTask({
+        title: newTaskTitle,
+        officeId: currentOffice.id,
+        ownerId: currentUser.uid
+      });
+      setNewTaskTitle('');
+      setSidebarTab('tasks');
+    } finally {
+      setIsRefiningTask(false);
+    }
+  };
+
+  const toggleOfficeStatus = async () => {
+    if (!currentOffice || isUpdatingOffice) return;
+    setIsUpdatingOffice(true);
+    try {
+      const newStatus = currentOffice.status === 'closed' ? 'open' : 'closed';
+      await updateDoc(doc(db, 'offices', currentOffice.id), { status: newStatus });
+    } catch (error) {
+      console.error("Toggle Office Error:", error);
+    } finally {
+      setIsUpdatingOffice(false);
+    }
+  };
+
   const handleChatbotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatbotInput.trim() || isChatbotLoading) return;
@@ -1048,7 +1166,21 @@ export const Miniverse: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className="flex gap-4">
+        <div className="flex gap-4 items-center">
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <button 
+              onClick={toggleOfficeStatus}
+              disabled={isUpdatingOffice}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                currentOffice.status !== 'closed' 
+                  ? 'bg-emerald-500 text-white shadow-md' 
+                  : 'text-slate-500 hover:bg-slate-200'
+              }`}
+            >
+              <Hand className="w-3 h-3" />
+              {currentOffice.status !== 'closed' ? 'OFFICE OPEN' : 'OFFICE CLOSED'}
+            </button>
+          </div>
           <button 
             onClick={() => setShowKnowledgeModal(true)}
             className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-2 hover:bg-slate-50 transition-colors"
@@ -1088,93 +1220,60 @@ export const Miniverse: React.FC = () => {
             }}
           >
             {/* Areas */}
-              <div 
-                className="absolute border-2 border-dashed border-emerald-400/30 bg-emerald-400/5 rounded-xl flex items-center justify-center"
-                style={{ 
-                  left: WORK_AREA.x * gridSize, 
-                  top: WORK_AREA.y * gridSize, 
-                  width: WORK_AREA.width * gridSize, 
-                  height: WORK_AREA.height * gridSize 
-                }}
-              >
-                <span className="text-[10px] font-bold text-emerald-600/40 uppercase tracking-widest">Work Station</span>
-              </div>
+            {OFFICE_AREAS.map(area => {
+              const Icon = area.icon;
+              return (
+                <div
+                  key={area.id}
+                  style={{
+                    position: 'absolute',
+                    left: area.x * gridSize,
+                    top: area.y * gridSize,
+                    width: area.w * gridSize,
+                    height: area.h * gridSize,
+                  }}
+                  className={`border-2 border-dashed ${area.color} ${area.border} rounded-2xl flex flex-col items-center justify-center group overflow-hidden transition-all duration-300 pointer-events-none`}
+                >
+                  <Icon className={`w-8 h-8 mb-1 opacity-10 group-hover:opacity-100 transition-opacity ${area.text}`} />
+                  <span className={`text-[8px] font-bold uppercase tracking-widest ${area.text} opacity-20 group-hover:opacity-100 text-center px-1`}>{area.name}</span>
+                  <span className="text-[6px] text-slate-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-1 text-center w-full">{area.description}</span>
+                  
+                  {/* Interaction Overlays */}
+                  <div className="absolute inset-0 pointer-events-auto flex items-center justify-center cursor-default">
+                    {area.id === 'vault' && (
+                      <button 
+                        className="w-full h-full cursor-pointer opacity-0"
+                        onClick={() => setShowStorageModal(true)}
+                        aria-label="Open Storage"
+                      />
+                    )}
+                    {area.id === 'optic' && (
+                      <button 
+                        className="w-full h-full cursor-pointer opacity-0"
+                        onClick={() => setShowVisionModal(true)}
+                        aria-label="Open Vision Lab"
+                      />
+                    )}
+                    {area.id === 'sonic' && (
+                      <button 
+                        className="w-full h-full cursor-pointer opacity-0"
+                        onClick={() => setShowAudioModal(true)}
+                        aria-label="Open Audio Lab"
+                      />
+                    )}
+                  </div>
 
-              <div 
-                className="absolute border-2 border-dashed border-indigo-400/30 bg-indigo-400/5 rounded-xl flex items-center justify-center"
-                style={{ 
-                  left: BREAK_AREA.x * gridSize, 
-                  top: BREAK_AREA.y * gridSize, 
-                  width: BREAK_AREA.width * gridSize, 
-                  height: BREAK_AREA.height * gridSize 
-                }}
-              >
-                <span className="text-[10px] font-bold text-indigo-600/40 uppercase tracking-widest">Break Area</span>
-              </div>
-
-              <div 
-                onClick={() => setShowStorageModal(true)}
-                className="absolute border-2 border-dashed border-amber-400/30 bg-amber-400/5 rounded-xl flex items-center justify-center cursor-pointer hover:bg-amber-400/10 transition-colors group"
-                style={{ 
-                  left: STORAGE_AREA.x * gridSize, 
-                  top: STORAGE_AREA.y * gridSize, 
-                  width: STORAGE_AREA.width * gridSize, 
-                  height: STORAGE_AREA.height * gridSize 
-                }}
-              >
-                <div className="flex flex-col items-center gap-1">
-                  <span className="text-[10px] font-bold text-amber-600/40 uppercase tracking-widest group-hover:text-amber-600/60 transition-colors">Storage</span>
-                  {tasks.filter(t => t.status === 'done' && !t.collected).length > 0 && (
-                    <div className="flex flex-col items-center gap-1">
-                      <span className="bg-amber-500 text-white text-[8px] px-1.5 py-0.5 rounded-full animate-bounce">
-                        {tasks.filter(t => t.status === 'done' && !t.collected).length} Items
+                  {/* Vault Item Counter */}
+                  {area.id === 'vault' && tasks.filter(t => t.status === 'done' && !t.collected).length > 0 && (
+                    <div className="absolute top-2 right-2 pointer-events-none">
+                       <span className="bg-amber-500 text-white text-[8px] px-1.5 py-0.5 rounded-full animate-bounce shadow-lg">
+                        {tasks.filter(t => t.status === 'done' && !t.collected).length}
                       </span>
-                      {tasks.filter(t => t.status === 'done' && !t.collected && !t.result).length > 0 && (
-                        <span className="text-[7px] text-amber-600 font-bold animate-pulse flex items-center gap-1">
-                          <Sparkles className="w-2 h-2" />
-                          AI Finalizing...
-                        </span>
-                      )}
                     </div>
                   )}
                 </div>
-              </div>
-
-              <div 
-                onClick={() => setShowVisionModal(true)}
-                className="absolute border-2 border-dashed border-indigo-400/30 bg-indigo-400/5 rounded-xl flex items-center justify-center cursor-pointer hover:bg-indigo-400/10 transition-colors group"
-                style={{ 
-                  left: VISION_AREA.x * gridSize, 
-                  top: VISION_AREA.y * gridSize, 
-                  width: VISION_AREA.width * gridSize, 
-                  height: VISION_AREA.height * gridSize 
-                }}
-              >
-                <div className="flex flex-col items-center gap-1">
-                  <span className="text-[10px] font-bold text-indigo-600/40 uppercase tracking-widest group-hover:text-indigo-600/60 transition-colors">Vision Lab</span>
-                  <div className="w-6 h-6 bg-indigo-100 rounded-lg flex items-center justify-center mt-1">
-                    <ImageIcon className="w-3 h-3 text-indigo-600" />
-                  </div>
-                </div>
-              </div>
-
-              <div 
-                onClick={() => setShowAudioModal(true)}
-                className="absolute border-2 border-dashed border-rose-400/30 bg-rose-400/5 rounded-xl flex items-center justify-center cursor-pointer hover:bg-rose-400/10 transition-colors group"
-                style={{ 
-                  left: AUDIO_AREA.x * gridSize, 
-                  top: AUDIO_AREA.y * gridSize, 
-                  width: AUDIO_AREA.width * gridSize, 
-                  height: AUDIO_AREA.height * gridSize 
-                }}
-              >
-                <div className="flex flex-col items-center gap-1">
-                  <span className="text-[10px] font-bold text-rose-600/40 uppercase tracking-widest group-hover:text-rose-600/60 transition-colors">Audio Lab</span>
-                  <div className="w-6 h-6 bg-rose-100 rounded-lg flex items-center justify-center mt-1">
-                    <Mic className="w-3 h-3 text-rose-600" />
-                  </div>
-                </div>
-              </div>
+              );
+            })}
 
               {/* Furniture Objects */}
               {FURNITURE.map(f => (
@@ -1331,7 +1430,10 @@ export const Miniverse: React.FC = () => {
                       ['looking_around', 'stretching', 'interacting'].includes(citizen.currentAction) ? 'bg-amber-400 text-white border-amber-300' :
                       'bg-white text-slate-400 border-slate-100'
                     }`}>
-                      {citizen.currentAction.replace('_', ' ')}
+                      {citizen.currentAction === 'working' ? 'Procesando' : 
+                       citizen.currentAction === 'thinking' ? 'Analizando' : 
+                       ['idle', 'looking_around', 'stretching', 'interacting'].includes(citizen.currentAction) ? 'En espera' : 
+                       citizen.currentAction.replace('_', ' ')}
                     </div>
                     <div className="mt-0.5 px-1 py-0.5 rounded-full bg-slate-800/50 text-white text-[5px] font-bold uppercase tracking-widest">
                       Interactive
@@ -1406,31 +1508,105 @@ export const Miniverse: React.FC = () => {
 
         {/* Sidebar Info */}
         <div className="w-80 flex flex-col gap-4 overflow-hidden h-full">
-          {/* Citizens List */}
-          <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm shrink-0 max-h-[180px] overflow-y-auto custom-scrollbar">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Citizens</h2>
-              <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded-full font-bold text-slate-500">{citizens.length}</span>
+          {/* Mission Control Sidebar */}
+          <div className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-4 overflow-hidden">
+            <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
+              <button 
+                onClick={() => setSidebarTab('citizens')}
+                className={`flex-1 py-2 rounded-lg text-[10px] font-bold transition-all flex items-center justify-center gap-2 ${
+                  sidebarTab === 'citizens' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                Citizens
+              </button>
+              <button 
+                onClick={() => setSidebarTab('tasks')}
+                className={`flex-1 py-2 rounded-lg text-[10px] font-bold transition-all flex items-center justify-center gap-2 ${
+                  sidebarTab === 'tasks' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <ListTodo className="w-3.5 h-3.5" />
+                Missions
+              </button>
             </div>
-            <div className="space-y-2">
-              {citizens.map(c => (
-                <button
-                  key={c.id}
-                  onClick={() => setSelectedCitizen(c)}
-                  className={`w-full flex items-center gap-3 p-2 rounded-xl transition-all border ${
-                    selectedCitizen?.id === c.id ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-transparent hover:bg-slate-100'
-                  }`}
-                >
-                  <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center shadow-sm">
-                    <User className="w-3.5 h-3.5 text-slate-600" />
+
+            {sidebarTab === 'citizens' ? (
+              <div className="space-y-2 max-h-[120px] overflow-y-auto custom-scrollbar pr-1">
+                {citizens.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => setSelectedCitizen(c)}
+                    className={`w-full flex items-center justify-between p-2 rounded-xl transition-all border ${
+                      selectedCitizen?.id === c.id ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-transparent hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center shadow-sm relative">
+                        <User className="w-3.5 h-3.5 text-slate-600" />
+                        <span className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-white ${
+                          c.currentAction === 'idle' ? 'bg-slate-300' : 
+                          c.currentAction === 'error' ? 'bg-rose-500' : 'bg-emerald-500'
+                        }`} />
+                      </div>
+                      <div className="text-left overflow-hidden">
+                        <p className="text-[10px] font-bold text-slate-800 truncate">{c.name}</p>
+                        <p className="text-[8px] text-slate-500 capitalize leading-none">{c.currentAction}</p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Task Creation */}
+                <div className="space-y-2">
+                  <div className="relative">
+                    <input 
+                      type="text"
+                      placeholder="Enter mission title..."
+                      value={newTaskTitle}
+                      onChange={(e) => setNewTaskTitle(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleRefineTask()}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-[10px] outline-none focus:border-indigo-500 pr-10"
+                    />
+                    <button 
+                      onClick={handleRefineTask}
+                      disabled={isRefiningTask || !newTaskTitle.trim()}
+                      className="absolute right-2 top-1.5 p-1 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-30"
+                    >
+                      {isRefiningTask ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                    </button>
                   </div>
-                  <div className="text-left overflow-hidden">
-                    <p className="text-xs font-bold text-slate-800 truncate">{c.name}</p>
-                    <p className="text-[9px] text-slate-500 capitalize">{c.currentAction}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
+                </div>
+
+                {/* Missions List */}
+                <div className="space-y-2 max-h-[140px] overflow-y-auto custom-scrollbar pr-1">
+                  {tasks.filter(t => t.status !== 'archived').sort((a, b) => b.createdAt?.localeCompare(a.createdAt || '')).map(t => (
+                    <div key={t.id} className="p-2.5 bg-white border border-slate-100 rounded-xl shadow-sm">
+                      <div className="flex justify-between items-start gap-2 mb-1">
+                        <h4 className="text-[9px] font-bold text-slate-800 line-clamp-1">{t.title}</h4>
+                        <span className={`text-[7px] font-black uppercase px-1 py-0.5 rounded ${
+                          t.status === 'done' ? 'bg-emerald-100 text-emerald-600' :
+                          t.status === 'in-progress' ? 'bg-indigo-100 text-indigo-600' :
+                          'bg-slate-100 text-slate-500'
+                        }`}>
+                          {t.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[7px] text-slate-400">
+                          {t.assignedTo ? (citizens.find(c => c.id === t.assignedTo)?.name || 'Agent') : 'Unassigned'}
+                        </span>
+                        {t.status === 'done' && (
+                          <button onClick={() => setViewingTaskResult(t)} className="text-indigo-600 hover:underline text-[7px] font-bold">VIEW RESULT</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Group Chat */}

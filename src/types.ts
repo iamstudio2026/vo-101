@@ -35,7 +35,7 @@ export interface Task {
   title: string;
   description?: string;
   assignedTo?: string;
-  status: 'todo' | 'in-progress' | 'done' | 'archived';
+  status: 'pending' | 'todo' | 'in-progress' | 'done' | 'archived';
   collected?: boolean;
   result?: string;
   flowId?: string;
