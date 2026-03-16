@@ -19,6 +19,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             cd ~/vo-101
-            git pull origin main
-            # Make sure build variables are in .env on the server
+            git fetch --all
+            git reset --hard origin/main
             docker-compose up -d --build
+            docker system prune -f
