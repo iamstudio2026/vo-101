@@ -2,9 +2,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useOffice } from '../context/OfficeContext';
-import { db, handleFirestoreError } from '../firebase';
+import { db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, deleteDoc, orderBy, limit } from 'firebase/firestore';
-import { Worker, Task, OperationType, AspectRatio, Citizen, ChatMessage, Knowledge, Office } from '../types';
+import { Worker, Task, AspectRatio, Citizen, ChatMessage, Knowledge, Office } from '../types';
 
 declare global {
   interface Window {
@@ -293,7 +293,7 @@ export const Miniverse: React.FC = () => {
       };
       reader.readAsDataURL(file);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'knowledge');
+      console.error('Error uploading knowledge file:', error);
       setUploadingFile(false);
     }
   };
@@ -314,7 +314,7 @@ export const Miniverse: React.FC = () => {
       });
       setNewKnowledge({ title: '', content: '', externalUrl: '' });
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'knowledge');
+      console.error('Error adding external knowledge:', error);
     } finally {
       setIsAddingKnowledge(false);
     }
@@ -453,7 +453,7 @@ export const Miniverse: React.FC = () => {
     try {
       await addDoc(collection(db, 'messages'), newMessage);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'messages');
+      console.error('Error sending agent message:', error);
     }
   };
 
@@ -474,7 +474,8 @@ export const Miniverse: React.FC = () => {
     try {
       await addDoc(collection(db, 'messages'), userMsg);
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'messages');
+      console.error('Error sending message:', error);
+      return;
     }
 
     // 2. Trigger agent responses based on AI Mode
@@ -575,7 +576,6 @@ export const Miniverse: React.FC = () => {
       });
     }, (error: any) => {
       console.error("Firestore Worker Subscription Error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'workers');
     });
 
     const tasksQuery = query(
@@ -589,7 +589,6 @@ export const Miniverse: React.FC = () => {
       setTasks(tasksData);
     }, (error: any) => {
       console.error("Firestore Task Subscription Error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'tasks');
     });
 
     const messagesQuery = query(
@@ -613,7 +612,6 @@ export const Miniverse: React.FC = () => {
       })));
     }, (error: any) => {
       console.error("Firestore Message Subscription Error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'messages');
     });
 
     const knowledgeQuery = query(
@@ -628,7 +626,6 @@ export const Miniverse: React.FC = () => {
       setKnowledge(knowledgeData);
     }, (error: any) => {
       console.error("Firestore Knowledge Subscription Error:", error);
-      handleFirestoreError(error, OperationType.LIST, 'knowledge');
     });
 
     return () => {
@@ -654,7 +651,7 @@ export const Miniverse: React.FC = () => {
       });
       setNewKnowledge({ title: '', content: '', externalUrl: '' });
     } catch (error: any) {
-      handleFirestoreError(error, OperationType.WRITE, 'knowledge');
+      console.error('Error adding knowledge:', error);
     } finally {
       setIsAddingKnowledge(false);
     }
@@ -664,7 +661,7 @@ export const Miniverse: React.FC = () => {
     try {
       await deleteDoc(doc(db, 'knowledge', id));
     } catch (error: any) {
-      handleFirestoreError(error, OperationType.DELETE, 'knowledge');
+      console.error('Error deleting knowledge:', error);
     }
   };
 
