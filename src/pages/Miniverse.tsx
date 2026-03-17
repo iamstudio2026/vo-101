@@ -19,6 +19,21 @@ import { GoogleGenAI } from "@google/genai";
 import Markdown from 'react-markdown';
 import * as aiService from '../services/aiService';
 
+const copyToClipboard = (text: string) => {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text);
+  } else {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+  }
+};
+
 const WORLD_WIDTH = 20;
 const WORLD_HEIGHT = 15;
 
@@ -393,7 +408,7 @@ export const Miniverse: React.FC = () => {
     
     setIsGeneratingWorld(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY! });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: `Generate a creative theme and description for a digital agent virtual office based on this prompt: "${finalPrompt}". 
@@ -1981,7 +1996,7 @@ export const Miniverse: React.FC = () => {
                   <button
                     onClick={() => {
                       if (viewingTaskResult?.result) {
-                        navigator.clipboard.writeText(viewingTaskResult.result);
+                        copyToClipboard(viewingTaskResult.result);
                       }
                     }}
                     disabled={!viewingTaskResult?.result || isGenerating}
@@ -2315,7 +2330,7 @@ export const Miniverse: React.FC = () => {
                       <span>npx create-virtual-office</span>
                     </div>
                     <button 
-                      onClick={() => navigator.clipboard.writeText('npx create-virtual-office')}
+                      onClick={() => copyToClipboard('npx create-virtual-office')}
                       className="text-xs text-slate-400 hover:text-white"
                     >
                       Copy
