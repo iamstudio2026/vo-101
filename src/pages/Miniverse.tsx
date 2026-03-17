@@ -595,7 +595,7 @@ export const Miniverse: React.FC = () => {
       collection(db, 'messages'),
       where('officeId', '==', currentOffice.id),
       orderBy('timestamp', 'desc'),
-      limit(50)
+      limit(20)
     );
 
     const unsubscribeMessages = onSnapshot(messagesQuery, (snapshot) => {
@@ -618,7 +618,8 @@ export const Miniverse: React.FC = () => {
       collection(db, 'knowledge'),
       where('officeId', '==', currentOffice.id),
       where('ownerId', '==', currentUser.uid),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(20)
     );
 
     const unsubscribeKnowledge = onSnapshot(knowledgeQuery, (snapshot) => {
@@ -832,8 +833,8 @@ export const Miniverse: React.FC = () => {
               } else if (Math.random() < 0.05) {
                 c.currentAction = Math.random() > 0.5 ? 'thinking' : 'working';
                 
-                // Occasional group message
-                if (Math.random() < 0.1) {
+                // Occasional group message (very low frequency to save Firestore quota)
+                if (Math.random() < 0.005) {
                   const messages = [
                     "Checking the latest logs...",
                     "Anyone seen the documentation for the new API?",
@@ -900,7 +901,7 @@ export const Miniverse: React.FC = () => {
 
         return next;
       });
-    }, 100);
+    }, 500);
 
     return () => clearInterval(interval);
   }, []);
