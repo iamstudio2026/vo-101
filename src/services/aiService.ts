@@ -1,4 +1,4 @@
-import { GoogleGenAI, ThinkingLevel, Modality, Type } from "@google/genai";
+import { GoogleGenAI, Modality } from "@google/genai";
 import { AspectRatio } from "../types";
 
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
@@ -62,11 +62,10 @@ export const generateThinkingResponse = async (prompt: string, systemInstruction
   const ai = getAiClient();
   return withRetry(async () => {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.0-flash",
       contents: prompt,
       config: { 
-        systemInstruction,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH }
+        systemInstruction
       }
     });
     return response.text;
@@ -102,54 +101,28 @@ export const generateExternalResponse = async (model: string, prompt: string, sy
 export const generateMapsResponse = async (prompt: string, lat?: number, lng?: number) => {
   const ai = getAiClient();
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
+    model: "gemini-2.0-flash",
     contents: prompt,
-    config: {
-      tools: [{ googleMaps: {} }],
-      toolConfig: {
-        retrievalConfig: lat && lng ? {
-          latLng: { latitude: lat, longitude: lng }
-        } : undefined
-      }
-    }
   });
-
-  const groundingUrls = response.candidates?.[0]?.groundingMetadata?.groundingChunks
-    ?.map(chunk => chunk.maps?.uri)
-    .filter((uri): uri is string => !!uri) || [];
 
   return {
     text: response.text,
-    groundingUrls
+    groundingUrls: []
   };
 };
 
 export const generateImage = async (prompt: string, aspectRatio: AspectRatio) => {
-  // Check for API key selection for Imagen/Veo models if needed, 
-  // but gemini-3-pro-image-preview is a nano banana series model.
-  // Actually, instructions say: "When using gemini-3-pro-image-preview ... users MUST select their own API key."
-  
-  if (!(window as any).aistudio?.hasSelectedApiKey()) {
-    await (window as any).aistudio?.openSelectKey();
-  }
-
   const ai = getAiClient();
   const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-image-preview',
-    contents: { parts: [{ text: prompt }] },
-    config: {
-      imageConfig: {
-        aspectRatio,
-        imageSize: "1K"
-      }
-    }
+    model: 'gemini-2.0-flash',
+    contents: { parts: [{ text: `Generate an image based on: ${prompt}` }] },
   });
 
   const candidate = response.candidates?.[0];
   if (candidate?.content?.parts) {
     for (const part of candidate.content.parts) {
       if (part.inlineData) {
-        return `data:image/png;base64,${part.inlineData.data}`;
+        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
       }
     }
   }
