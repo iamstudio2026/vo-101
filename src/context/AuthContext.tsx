@@ -41,7 +41,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setUserProfile(userSnap.data() as User);
           }
         } catch (error) {
-          handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
+          console.error('Error loading user profile:', error);
+          setUserProfile(null);
         }
       } else {
         setUserProfile(null);
