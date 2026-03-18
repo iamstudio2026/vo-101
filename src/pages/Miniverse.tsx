@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useOffice } from '../context/OfficeContext';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, deleteDoc, orderBy, limit } from 'firebase/firestore';
-import { Worker, Task, AspectRatio, Citizen, ChatMessage, Knowledge, Office } from '../types';
+import { Worker, Task, AspectRatio, Citizen, ChatMessage, Knowledge, Office, Furniture } from '../types';
 
 declare global {
   interface Window {
@@ -85,16 +85,20 @@ const getDepartmentArea = (deptId: string) => {
   };
 };
 
-const FURNITURE = [
-  { id: 'f1', name: 'Coffee Machine', x: 18, y: 1, icon: Coffee },
-  { id: 'f2', name: 'Server Rack', x: 5, y: 1, icon: Cpu },
-  { id: 'f3', name: 'Main Terminal', x: 10, y: 1, icon: Terminal },
-  { id: 'f4', name: 'Drafting Table', x: 1, y: 12, icon: ClipboardCheck },
-  { id: 'f5', name: 'Digital Canvas', x: 1, y: 7, icon: Layers },
+const FURNITURE: Furniture[] = [
+  { id: 'f1', name: 'Coffee Machine', x: 18, y: 1, icon: Coffee, type: 'coffee' },
+  { id: 'f2', name: 'Server Rack', x: 5, y: 1, icon: Cpu, type: 'server' },
+  { id: 'f3', name: 'Main Terminal', x: 10, y: 1, icon: Terminal, type: 'terminal' },
+  { id: 'f4', name: 'Drafting Table', x: 1, y: 12, icon: ClipboardCheck, type: 'table' },
+  { id: 'f5', name: 'Digital Canvas', x: 1, y: 7, icon: Layers, type: 'canvas' },
+  { id: 'f6', name: 'Office Printer', x: 17, y: 6, icon: Download, type: 'printer' },
+  { id: 'f7', name: 'Archive Monitor', x: 1, y: 1, icon: Monitor, type: 'monitor' },
 ];
 
 const CHAT_PROXIMITY = 1.2; // Distance to trigger chat
 const CHAT_DURATION = 50; // Ticks (approx 5 seconds at 100ms interval)
+const DISCUSSION_PROXIMITY = 1.5;
+const DISCUSSION_DURATION = 80;
 
 export const Miniverse: React.FC = () => {
   const { currentUser } = useAuth();
@@ -138,6 +142,7 @@ export const Miniverse: React.FC = () => {
   const [groupChannelInput, setGroupChannelInput] = useState('');
   const [isSendingGroupMessage, setIsSendingGroupMessage] = useState(false);
   const [groupChannelError, setGroupChannelError] = useState<string | null>(null);
+  const [serverTime, setServerTime] = useState<number>(new Date().getHours()); // 0-23
   const [knowledge, setKnowledge] = useState<Knowledge[]>([]);
   const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
   const [newKnowledge, setNewKnowledge] = useState({ title: '', content: '', externalUrl: '' });
@@ -161,6 +166,14 @@ export const Miniverse: React.FC = () => {
   useEffect(() => {
     officeRef.current = currentOffice;
   }, [currentOffice]);
+
+  // Day/Night Cycle Update
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setServerTime(new Date().getHours());
+    }, 60000); // Check every minute
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!worldContainerRef.current) return;
@@ -823,25 +836,33 @@ export const Miniverse: React.FC = () => {
             }
           }
 
-          // Work Assignment Logic
+          // Work Assignment Logic (Functional Furniture)
           if (c.isAssignedWork) {
             if (!c.hasProduct) {
               const taskToStart = (tasksRef.current || []).find(t => t.id === c.currentTaskId);
               const deptId = taskToStart ? getTaskDepartment(taskToStart.title, taskToStart.description) : 'logic';
               const targetDept = getDepartmentArea(deptId);
-
-              const inWorkArea = c.x >= targetDept.x && c.x <= targetDept.x + targetDept.width &&
-                               c.y >= targetDept.y && c.y <= targetDept.y + targetDept.height;
               
-              if (!inWorkArea) {
+              // Target specific furniture based on task type
+              let targetFurniture: Furniture | undefined;
+              if (deptId === 'optic') targetFurniture = FURNITURE.find(f => f.type === 'canvas');
+              if (deptId === 'sonic') targetFurniture = FURNITURE.find(f => f.type === 'server');
+              if (deptId === 'logic') targetFurniture = FURNITURE.find(f => f.type === 'terminal');
+              if (deptId === 'archive') targetFurniture = FURNITURE.find(f => f.type === 'monitor');
+
+              const targetPos = targetFurniture ? { x: targetFurniture.x, y: targetFurniture.y } : { x: targetDept.x + targetDept.width /2, y: targetDept.y + targetDept.height / 2 };
+
+              const distToTarget = Math.sqrt(Math.pow(c.x - targetPos.x, 2) + Math.pow(c.y - targetPos.y, 2));
+
+              if (distToTarget > 0.5) {
                 if (c.currentAction !== 'walking') {
-                  c.targetX = targetDept.x + targetDept.width / 2;
-                  c.targetY = targetDept.y + targetDept.height / 2;
+                  c.targetX = targetPos.x;
+                  c.targetY = targetPos.y;
                   c.currentAction = 'walking';
                 }
               } else {
                 c.currentAction = 'working';
-                c.workProgress = (c.workProgress || 0) + 1;
+                c.workProgress = (c.workProgress || 0) + 1.5; // Slightly faster logic
                 if (c.workProgress >= 100) {
                   c.hasProduct = true;
                   c.workProgress = 0;
@@ -849,25 +870,62 @@ export const Miniverse: React.FC = () => {
                 }
               }
             } else {
-              // Move to Storage Area
-              const inStorageArea = c.x >= STORAGE_AREA.x && c.x <= STORAGE_AREA.x + STORAGE_AREA.width &&
-                                  c.y >= STORAGE_AREA.y && c.y <= STORAGE_AREA.y + STORAGE_AREA.height;
+              // Move to Storage Area (Vault or Printer)
+              const targetPos = { x: STORAGE_AREA.x + STORAGE_AREA.width / 2, y: STORAGE_AREA.y + STORAGE_AREA.height / 2 };
+              const distToTarget = Math.sqrt(Math.pow(c.x - targetPos.x, 2) + Math.pow(c.y - targetPos.y, 2));
               
-              if (!inStorageArea) {
-                c.targetX = STORAGE_AREA.x + STORAGE_AREA.width / 2;
-                c.targetY = STORAGE_AREA.y + STORAGE_AREA.height / 2;
+              if (distToTarget > 0.5) {
+                c.targetX = targetPos.x;
+                c.targetY = targetPos.y;
                 c.currentAction = 'walking';
               } else {
                 if (c.currentTaskId) {
                   completeTask(c.id, c.currentTaskId);
                 }
                 c.hasProduct = false;
-                c.isAssignedWork = false; // Finish work cycle
+                c.isAssignedWork = false; 
                 c.currentTaskId = undefined;
                 c.currentAction = 'idle';
+                
+                // Final interaction with printer if applicable
+                const printer = FURNITURE.find(f => f.type === 'printer');
+                if (printer) {
+                  c.targetX = printer.x;
+                  c.targetY = printer.y;
+                  c.currentAction = 'walking';
+                }
               }
             }
           } else {
+            // Collaboration Logic (Agent-Agent Discussion)
+            if (Math.random() < 0.03 && !c.isDiscussing) {
+              const otherAgent = next.find((other, idx) => idx !== i && other.currentAction === 'idle' && !other.isAssignedWork && !other.isDiscussing);
+              if (otherAgent) {
+                 const dist = Math.sqrt(Math.pow(c.x - otherAgent.x, 2) + Math.pow(c.y - otherAgent.y, 2));
+                 if (dist < DISCUSSION_PROXIMITY) {
+                   c.currentAction = 'discussing';
+                   c.isDiscussing = true;
+                   c.discussionWith = otherAgent.id;
+                   c.chatTimer = DISCUSSION_DURATION;
+
+                   otherAgent.currentAction = 'discussing';
+                   otherAgent.isDiscussing = true;
+                   otherAgent.discussionWith = c.id;
+                   otherAgent.chatTimer = DISCUSSION_DURATION;
+                 }
+              }
+            }
+
+            if (c.currentAction === 'discussing') {
+              if (c.chatTimer && c.chatTimer > 0) {
+                c.chatTimer--;
+                continue;
+              } else {
+                c.currentAction = 'idle';
+                c.isDiscussing = false;
+                c.discussionWith = undefined;
+              }
+            }
             // Proximity Check for Chatting (Only if not working)
             if (Math.random() < 0.05) {
               for (let j = 0; j < next.length; j++) {
@@ -1225,6 +1283,10 @@ export const Miniverse: React.FC = () => {
     return <div className="p-8 text-center text-slate-500">Select an office to enter the Virtual Office.</div>;
   }
 
+  const hour = serverTime;
+  const isNight = hour >= 20 || hour <= 6;
+  const isDusk = hour === 18 || hour === 19;
+
   return (
     <div className="flex flex-col h-[calc(100vh-120px)] max-h-[800px]">
       <header className="mb-4 flex justify-between items-end shrink-0">
@@ -1310,8 +1372,34 @@ export const Miniverse: React.FC = () => {
           </div>
         </div>
       </header>
+ 
+      {/* Dynamic HUD & Environment Wrapper */}
+      <div className="flex-1 flex gap-6 overflow-hidden relative">
+        {/* Holographic Stats Console */}
+        <div className="absolute top-4 left-4 z-50 pointer-events-none flex flex-col gap-2">
+          <div className="bg-slate-900/40 backdrop-blur-md border border-cyan-500/30 p-2 rounded-xl text-[8px] font-mono text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.2)] animate-pulse">
+            <div className="flex justify-between gap-4 mb-1">
+              <span>SYSTEM_UPTIME:</span>
+              <span>{Math.floor(Date.now() / 100000) % 9999}s</span>
+            </div>
+            <div className="flex justify-between gap-4 mb-1">
+              <span>COG_LOAD:</span>
+              <span>{(citizens.length * 12.4).toFixed(1)}%</span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span>MEMORY:</span>
+              <span>{(1.2 + Math.random() * 0.5).toFixed(2)}GB</span>
+            </div>
+          </div>
+          <div className="bg-indigo-900/40 backdrop-blur-md border border-indigo-400/30 p-2 rounded-xl text-[8px] font-mono text-indigo-300 shadow-[0_0_15px_rgba(129,140,248,0.2)]">
+            <div className="flex items-center gap-2">
+               <div className={`w-1.5 h-1.5 rounded-full ${isNight ? 'bg-indigo-400 shadow-[0_0_5px_#818cf8]' : 'bg-amber-400 shadow-[0_0_5px_#fbbf24]'} animate-pulse`} />
+               <span>ENV_MODE: {isNight ? 'NIGHT_PROTOCOL' : isDusk ? 'DUSK_TRANSITION' : 'DAY_PROTO'}</span>
+            </div>
+          </div>
+        </div>
 
-      <div className="flex-1 flex gap-6 overflow-hidden">
+
         {/* World View */}
         <div className="flex-1 relative flex items-center justify-center" ref={worldContainerRef}>
           <div 
@@ -1320,13 +1408,23 @@ export const Miniverse: React.FC = () => {
               width: WORLD_WIDTH * gridSize + 16,
               height: WORLD_HEIGHT * gridSize + 16,
               backgroundImage: `
-                linear-gradient(to right, #e2e8f0 1px, transparent 1px),
-                linear-gradient(to bottom, #e2e8f0 1px, transparent 1px),
-                radial-gradient(circle, #cbd5e1 1px, transparent 1px)
+                linear-gradient(to right, ${serverTime >= 20 || serverTime <= 6 ? '#1e293b' : '#e2e8f0'} 1px, transparent 1px),
+                linear-gradient(to bottom, ${serverTime >= 20 || serverTime <= 6 ? '#1e293b' : '#e2e8f0'} 1px, transparent 1px),
+                radial-gradient(circle, ${serverTime >= 20 || serverTime <= 6 ? '#334155' : '#cbd5e1'} 1px, transparent 1px)
               `,
-              backgroundSize: `${gridSize}px ${gridSize}px, ${gridSize}px ${gridSize}px, ${gridSize}px ${gridSize}px`
+              backgroundSize: `${gridSize}px ${gridSize}px, ${gridSize}px ${gridSize}px, ${gridSize}px ${gridSize}px`,
+              backgroundColor: serverTime >= 20 || serverTime <= 6 ? '#0f172a' : '#f8fafc',
+              transition: 'all 2s ease-in-out'
             }}
           >
+            {/* Night-time Color Grading Overlay */}
+            {(serverTime >= 20 || serverTime <= 6) && (
+              <div className="absolute inset-0 z-40 bg-indigo-950/30 mix-blend-multiply pointer-events-none" />
+            )}
+            {(serverTime === 18 || serverTime === 19) && (
+              <div className="absolute inset-0 z-40 bg-amber-900/20 mix-blend-overlay pointer-events-none" />
+            )}
+
              {OFFICE_AREAS.map(area => {
               return (
                 <div
@@ -1991,13 +2089,13 @@ export const Miniverse: React.FC = () => {
                 <div className="bg-slate-50 p-2 rounded-xl border border-slate-100">
                   <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">Direct Messages</p>
                   <div className="max-h-24 overflow-y-auto space-y-2 custom-scrollbar pr-1">
-                    {(selectedCitizen.messages || []).filter(m => m.type === 'private').map(msg => (
-                      <div key={msg.id} className={`text-[9px] p-1.5 rounded-lg ${msg.senderId === selectedCitizen.id ? 'bg-indigo-100 text-indigo-800' : 'bg-white text-slate-600 border border-slate-100'}`}>
+                    {(selectedCitizen?.messages || []).filter(m => m.type === 'private').map(msg => (
+                      <div key={msg.id} className={`text-[9px] p-1.5 rounded-lg ${msg.senderId === selectedCitizen?.id ? 'bg-indigo-100 text-indigo-800' : 'bg-white text-slate-600 border border-slate-100'}`}>
                         <p className="font-bold mb-0.5">{msg.senderName}</p>
                         <p>{msg.message}</p>
                       </div>
                     ))}
-                    {(selectedCitizen.messages || []).length === 0 && (
+                    {(selectedCitizen?.messages || []).length === 0 && (
                       <p className="text-[9px] text-slate-400 italic text-center py-2">No private messages</p>
                     )}
                   </div>
@@ -2006,21 +2104,24 @@ export const Miniverse: React.FC = () => {
                 <div className="space-y-2 text-[11px]">
                   <div className="flex justify-between text-slate-500">
                     <span>Action</span>
-                    <span className="font-bold text-slate-900 capitalize">{selectedCitizen.currentAction}</span>
+                    <span className="font-bold text-slate-900 capitalize">{selectedCitizen?.currentAction}</span>
                   </div>
-                  {selectedCitizen.isAssignedWork && (
+                  {selectedCitizen?.isAssignedWork && (
                     <div className="pt-1">
                       <div className="flex justify-between text-[9px] uppercase font-bold text-slate-400 mb-1">
                         <span className="truncate max-w-[100px]">
                           {tasks.find(t => t.id === selectedCitizen.currentTaskId)?.title || 'Task in Progress'}
                         </span>
-                        <span>{Math.floor(selectedCitizen.workProgress || 0)}%</span>
                       </div>
-                      <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+                      <div className="flex justify-between mb-1 text-slate-500">
+                        <span>Progress</span>
+                        <span className="font-bold text-indigo-600">{Math.round(selectedCitizen?.workProgress || 0)}%</span>
+                      </div>
+                      <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
                         <motion.div 
-                          className="bg-indigo-600 h-full"
+                          className="h-full bg-indigo-500"
                           initial={{ width: 0 }}
-                          animate={{ width: `${selectedCitizen.workProgress || 0}%` }}
+                          animate={{ width: `${selectedCitizen?.workProgress || 0}%` }}
                         />
                       </div>
                     </div>
@@ -2029,8 +2130,8 @@ export const Miniverse: React.FC = () => {
               </div>
             </motion.div>
           )}
+          </div>
         </div>
-      </div>
       {/* Storage Inventory Modal */}
       <AnimatePresence>
         {showStorageModal && (
@@ -2180,8 +2281,8 @@ export const Miniverse: React.FC = () => {
                         onClick={() => viewingTaskResult && processTaskWithAI(viewingTaskResult)}
                         className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20"
                       >
-                        <Sparkles className="w-4 h-4" />
-                        Generate with Agent AI
+                        <Zap className="w-4 h-4" />
+                        Generate with AI
                       </button>
                     </div>
                   )}
@@ -2340,7 +2441,7 @@ export const Miniverse: React.FC = () => {
                       {audioFile ? (
                         <div className="flex flex-col items-center gap-2">
                           <FileAudio className="w-8 h-8 text-rose-500" />
-                          <p className="text-xs font-bold text-slate-700 truncate max-w-[150px]">{audioFile.name}</p>
+                          <p className="text-xs font-bold text-slate-700 truncate max-w-[150px]">{audioFile?.name}</p>
                         </div>
                       ) : (
                         <>

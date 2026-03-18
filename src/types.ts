@@ -98,12 +98,22 @@ export interface ChatMessage {
   audioUrl?: string;
 }
 
+export interface Furniture {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  icon: any;
+  type: 'terminal' | 'coffee' | 'server' | 'table' | 'canvas' | 'printer' | 'monitor';
+  isActive?: boolean;
+}
+
 export interface Citizen extends Worker {
   x: number;
   y: number;
   targetX: number;
   targetY: number;
-  currentAction: 'idle' | 'working' | 'thinking' | 'walking' | 'error' | 'chatting' | 'delivering' | 'looking_around' | 'stretching' | 'interacting';
+  currentAction: 'idle' | 'working' | 'thinking' | 'walking' | 'error' | 'chatting' | 'delivering' | 'looking_around' | 'stretching' | 'interacting' | 'discussing';
   chattingWith?: string;
   chatTimer?: number;
   idleActionTimer?: number;
@@ -111,6 +121,9 @@ export interface Citizen extends Worker {
   workProgress?: number;
   isAssignedWork?: boolean;
   currentTaskId?: string;
+  targetFurnitureId?: string;
+  isDiscussing?: boolean;
+  discussionWith?: string;
   messages: ChatMessage[];
 }
 
