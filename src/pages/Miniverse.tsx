@@ -113,7 +113,7 @@ export const Miniverse: React.FC = () => {
   const [worldPrompt, setWorldPrompt] = useState('');
   const [showVisionModal, setShowVisionModal] = useState(false);
   const [showAudioModal, setShowAudioModal] = useState(false);
-  const [sidebarTab, setSidebarTab] = useState<'citizens' | 'tasks'>('citizens');
+  const [sidebarTab, setSidebarTab] = useState<'citizens' | 'tasks' | 'archive'>('citizens');
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [isRefiningTask, setIsRefiningTask] = useState(false);
   const [isUpdatingOffice, setIsUpdatingOffice] = useState(false);
@@ -467,9 +467,10 @@ export const Miniverse: React.FC = () => {
     }
 
     if (!message.trim()) return;
-
+ 
     setIsSendingGroupMessage(true);
     setGroupChannelError(null);
+    console.log(`[Chat] User "${currentUser.displayName}" sending message: "${message}"`);
 
     // 1. Add user message to Firestore
     const userMsg = {
@@ -484,14 +485,16 @@ export const Miniverse: React.FC = () => {
 
     try {
       await addDoc(collection(db, 'messages'), userMsg);
+      console.log(`[Chat] User message saved to Firestore.`);
     } catch (error: any) {
-      console.error('Error sending message:', error);
+      console.error('[Chat] Error sending message:', error);
       setGroupChannelError(error.message || 'Failed to send message.');
       setIsSendingGroupMessage(false);
       return;
     }
 
     // 2. Trigger agent responses based on AI Mode & Mentions
+    console.log(`[Chat] Checking for responders among ${citizens.length} citizens...`);
     if (citizens.length > 0) {
       // Check for mentions @Name
       const mentionedAgent = citizens.find(c => message.toLowerCase().includes(`@${c.name.toLowerCase()}`));
@@ -533,13 +536,14 @@ export const Miniverse: React.FC = () => {
       }
 
       for (const agent of responders) {
+        console.log(`[Chat] Scheduling response for agent: ${agent.name}`);
         // Artificial delay for realism
         setTimeout(async () => {
           try {
+            console.log(`[Chat] Agent ${agent.name} is starting to generate response...`);
             let responseText = "";
             let groundingUrls: string[] = [];
             
-            // Instruction refinement: Tell them if they were mentioned or if it's a general task
             const instructionPrefix = mentionedAgent?.id === agent.id 
               ? "You were specifically mentioned in this message." 
               : "This is a general message to the team.";
@@ -547,7 +551,10 @@ export const Miniverse: React.FC = () => {
             const systemInstruction = `You are ${agent.name}, a ${agent.role} in a Virtual Office. 
               ${instructionPrefix}
               The Admin just sent: "${message}".
-              Respond briefly (max 25 words), stay in character. If you were assigned a task, acknowledge it.`;
+              Respond briefly (max 30 words), stay in character. If you were assigned a task, acknowledge it.`;
+
+            // Ensure we have a valid model string
+            const agentModel = agent.model && agent.model.trim() ? agent.model : "gemini-2.0-flash";
 
             if (aiMode === 'thinking') {
               responseText = await aiService.generateThinkingResponse(message, systemInstruction) || "";
@@ -556,9 +563,10 @@ export const Miniverse: React.FC = () => {
               responseText = res.text || "";
               groundingUrls = res.groundingUrls;
             } else {
-              // Use the worker response to handle external models if needed
-              responseText = await aiService.generateWorkerResponse(agent.model || "gemini-2.0-flash", message, systemInstruction) || "";
+              responseText = await aiService.generateWorkerResponse(agentModel, message, systemInstruction) || "";
             }
+
+            console.log(`[Chat] Agent ${agent.name} response: "${responseText}"`);
 
             if (responseText) {
               let audioUrl: string | undefined;
@@ -585,21 +593,24 @@ export const Miniverse: React.FC = () => {
               };
 
               await addDoc(collection(db, 'messages'), newMessage);
+              console.log(`[Chat] Message from ${agent.name} saved to Firestore.`);
               
               if (audioUrl) {
                 const audio = new Audio(audioUrl);
-                audio.play();
+                audio.play().catch(e => console.error("Audio playback failed:", e));
               }
+            } else {
+              console.warn(`[Chat] Agent ${agent.name} generated an empty response.`);
             }
           } catch (error: any) {
-            console.error("Agent Response Error:", error);
-            // Optionally notify the group about the failure specifically
+            console.error(`[Chat] Agent ${agent.name} Error:`, error);
             setGroupChannelError(`Agent ${agent.name} failed to respond: ${error.message || 'AI Error'}`);
           }
         }, Math.random() * 2000 + 1000);
       }
     }
     
+    // We keep this here to allow the user to send the next message immediately
     setIsSendingGroupMessage(false);
   };
 
@@ -1099,6 +1110,29 @@ export const Miniverse: React.FC = () => {
     }
   };
 
+  const restoreTaskToSimulation = async (taskId: string) => {
+    try {
+      const taskRef = doc(db, 'tasks', taskId);
+      await updateDoc(taskRef, {
+        status: 'done',
+        collected: false
+      });
+      console.log(`[Archive] Task ${taskId} restored to simulation.`);
+    } catch (error) {
+      console.error("[Archive] Error restoring task:", error);
+    }
+  };
+
+  const deleteTaskFromArchive = async (taskId: string) => {
+    if (!window.confirm("¿Seguro que deseas eliminar este archivo permanentemente?")) return;
+    try {
+      await deleteDoc(doc(db, 'tasks', taskId));
+      console.log(`[Archive] Task ${taskId} deleted.`);
+    } catch (error) {
+      console.error("[Archive] Error deleting task:", error);
+    }
+  };
+
   const toggleOfficeStatus = async () => {
     if (!currentOffice || isUpdatingOffice) return;
     setIsUpdatingOffice(true);
@@ -1293,10 +1327,7 @@ export const Miniverse: React.FC = () => {
               backgroundSize: `${gridSize}px ${gridSize}px, ${gridSize}px ${gridSize}px, ${gridSize}px ${gridSize}px`
             }}
           >
-            {/* Areas */}
-            {OFFICE_AREAS.map(area => {
-              const Icon = area.icon;
-              const isSelected = selectedCitizen && getTaskDepartment('', '') === area.id;
+             {OFFICE_AREAS.map(area => {
               return (
                 <div
                   key={area.id}
@@ -1313,7 +1344,7 @@ export const Miniverse: React.FC = () => {
                   <div className={`absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity duration-700 bg-gradient-to-br from-white via-transparent to-black`} />
                   
                   <div className="relative z-10 flex flex-col items-center justify-center p-2 text-center">
-                    <Icon className={`w-8 h-8 mb-2 transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 ${area.text} opacity-20 group-hover:opacity-100`} />
+                    <area.icon className={`w-8 h-8 mb-2 transition-all duration-500 group-hover:scale-110 group-hover:rotate-6 ${area.text} opacity-20 group-hover:opacity-100`} />
                     <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${area.text} opacity-30 group-hover:opacity-100 transition-all duration-500 leading-tight`}>
                       {area.name}
                     </span>
@@ -1350,7 +1381,7 @@ export const Miniverse: React.FC = () => {
                       />
                     )}
                   </div>
-
+ 
                   {/* Vault Item Counter */}
                   {area.id === 'vault' && tasks.filter(t => t.status === 'done' && !t.collected).length > 0 && (
                     <div className="absolute top-3 right-3 pointer-events-none z-30">
@@ -1653,17 +1684,26 @@ export const Miniverse: React.FC = () => {
               </button>
               <button 
                 onClick={() => setSidebarTab('tasks')}
-                className={`flex-1 py-2 rounded-lg text-[10px] font-bold transition-all flex items-center justify-center gap-2 ${
+                className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center justify-center gap-2 ${
                   sidebarTab === 'tasks' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
                 <ListTodo className="w-3.5 h-3.5" />
                 Missions
               </button>
+              <button 
+                onClick={() => setSidebarTab('archive')}
+                className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center justify-center gap-2 ${
+                  sidebarTab === 'archive' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <Archive className="w-3.5 h-3.5" />
+                Archivo
+              </button>
             </div>
 
             {sidebarTab === 'citizens' ? (
-              <div className="space-y-2 max-h-[120px] overflow-y-auto custom-scrollbar pr-1">
+              <div className="space-y-2 max-h-[220px] overflow-y-auto custom-scrollbar pr-1">
                 {citizens.map(c => (
                   <button
                     key={c.id}
@@ -1682,13 +1722,16 @@ export const Miniverse: React.FC = () => {
                       </div>
                       <div className="text-left overflow-hidden">
                         <p className="text-[10px] font-bold text-slate-800 truncate">{c.name}</p>
-                        <p className="text-[8px] text-slate-500 capitalize leading-none">{c.currentAction}</p>
+                        <p className="text-[8px] text-slate-500 capitalize leading-none">{c.currentAction || 'idle'}</p>
                       </div>
                     </div>
                   </button>
                 ))}
+                {citizens.length === 0 && (
+                  <p className="text-[9px] text-slate-400 italic text-center py-4">No agents active</p>
+                )}
               </div>
-            ) : (
+            ) : sidebarTab === 'tasks' ? (
               <div className="space-y-4">
                 {/* Task Creation */}
                 <div className="space-y-2">
@@ -1713,7 +1756,7 @@ export const Miniverse: React.FC = () => {
 
                 {/* Missions List */}
                 <div className="space-y-2 max-h-[140px] overflow-y-auto custom-scrollbar pr-1">
-                  {tasks.filter(t => t.status !== 'archived').sort((a, b) => b.createdAt?.localeCompare(a.createdAt || '')).map(t => (
+                  {tasks.filter(t => t.status !== 'archived').sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).map(t => (
                     <div key={t.id} className="p-2.5 bg-white border border-slate-100 rounded-xl shadow-sm">
                       <div className="flex justify-between items-start gap-2 mb-1">
                         <h4 className="text-[9px] font-bold text-slate-800 line-clamp-1">{t.title}</h4>
@@ -1735,6 +1778,72 @@ export const Miniverse: React.FC = () => {
                       </div>
                     </div>
                   ))}
+                  {tasks.filter(t => t.status !== 'archived').length === 0 && (
+                    <p className="text-[9px] text-slate-400 italic text-center py-4">No active missions</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between mb-2">
+                   <h3 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <Archive className="w-3 h-3" />
+                    Vault Assets
+                   </h3>
+                   <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 rounded-full">
+                    {tasks.filter(t => t.status === 'archived' || (t.status === 'done' && t.collected)).length}
+                   </span>
+                </div>
+                <div className="space-y-2 max-h-[220px] overflow-y-auto custom-scrollbar pr-1">
+                  {tasks.filter(t => t.status === 'archived' || (t.status === 'done' && t.collected)).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).map(t => (
+                    <div key={t.id} className="p-2.5 bg-slate-50 border border-slate-100 rounded-xl group hover:bg-white hover:shadow-md transition-all">
+                      <div className="flex justify-between items-start gap-2 mb-1">
+                        <h4 className="text-[9px] font-bold text-slate-800 line-clamp-1">{t.title}</h4>
+                      </div>
+                      <div className="flex items-center justify-between mt-2">
+                        <div className="flex gap-1.5">
+                           <button 
+                             onClick={() => setViewingTaskResult(t)}
+                             className="text-[8px] font-bold text-indigo-600 hover:bg-indigo-50 px-1.5 py-0.5 rounded transition-colors"
+                           >
+                             VIEW
+                           </button>
+                           <button 
+                             onClick={async () => {
+                               try {
+                                 await updateDoc(doc(db, 'tasks', t.id), { status: 'pending', collected: false });
+                               } catch (err) {
+                                 console.error("Restore Task Error:", err);
+                               }
+                             }}
+                             className="text-[8px] font-bold text-emerald-600 hover:bg-emerald-50 px-1.5 py-0.5 rounded transition-colors"
+                           >
+                             RESTORE
+                           </button>
+                        </div>
+                        <button 
+                          onClick={async () => {
+                            if (window.confirm('Delete this asset permanently?')) {
+                              try {
+                                await deleteDoc(doc(db, 'tasks', t.id));
+                              } catch (err) {
+                                console.error("Delete Task Error:", err);
+                              }
+                            }
+                          }}
+                          className="p-1 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded transition-colors"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {tasks.filter(t => t.status === 'archived' || (t.status === 'done' && t.collected)).length === 0 && (
+                    <div className="text-center py-8">
+                       <Archive className="w-8 h-8 text-slate-100 mx-auto mb-2" />
+                       <p className="text-[9px] text-slate-400 italic">Vault is empty</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1786,7 +1895,7 @@ export const Miniverse: React.FC = () => {
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-3 mb-3 custom-scrollbar pr-1">
-              {groupMessages.map((msg: any) => (
+              {groupMessages.map((msg) => (
                 <div key={msg.id} className="text-[10px] group relative">
                   <div className="flex items-center gap-1 mb-0.5">
                     <span className="font-bold text-indigo-400">{msg.senderName}</span>

@@ -135,7 +135,7 @@ service cloud.firestore {
     function isValidTask(data) {
       return data.keys().hasAll(['officeId', 'title', 'status', 'ownerId', 'createdAt']) &&
              isValidString(data.title, 1, 200) &&
-             data.status in ['todo', 'in-progress', 'done', 'archived'] &&
+             data.status in ['pending', 'todo', 'in-progress', 'done', 'archived'] &&
              data.ownerId == request.auth.uid;
     }
 

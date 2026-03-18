@@ -4,8 +4,13 @@ import { AspectRatio } from "../types";
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 const openRouterKey = import.meta.env.VITE_OPENROUTER_API_KEY;
 
+console.log(`[AI] Environment check: Gemini Key: ${apiKey ? 'PRESENT' : 'MISSING'}, OpenRouter Key: ${openRouterKey ? 'PRESENT' : 'MISSING'}`);
+
 export const getAiClient = () => {
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not defined");
+  if (!apiKey) {
+    console.error("[AI] Gemini API Key is missing!");
+    throw new Error("GEMINI_API_KEY is not defined");
+  }
   return new GoogleGenAI({ apiKey });
 };
 
@@ -31,19 +36,44 @@ export const generateFastResponse = async (prompt: string, systemInstruction?: s
 };
 
 export const generateWorkerResponse = async (model: string, prompt: string, systemInstruction?: string) => {
-  // Routing logic: If it's a native Gemini model, use Google SDK.
-  // Otherwise, use OpenRouter for DeepSeek, Qwen, etc.
   const isNativeGemini = model.startsWith('gemini-');
+  console.log(`[AI] Generating response with model: ${model}, isNative: ${isNativeGemini}`);
   
   if (isNativeGemini) {
     const ai = getAiClient();
     return withRetry(async () => {
-      const response = await ai.models.generateContent({
-        model: model || "gemini-2.0-flash",
-        contents: prompt,
-        config: { systemInstruction }
-      });
-      return response.text;
+      try {
+        const response = await ai.models.generateContent({
+          model: model || "gemini-2.0-flash",
+          contents: prompt,
+          config: { systemInstruction }
+        });
+        
+        console.log(`[AI] Gemini raw response:`, response);
+        
+        // Handle different SDK response patterns specifically for @google/genai
+        let text = "";
+        
+        // 1. Try candidates/content/parts
+        if (response.candidates && response.candidates.length > 0) {
+          const candidate = response.candidates[0];
+          if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
+            text = candidate.content.parts[0].text || "";
+          }
+        }
+        
+        // 2. Fallback to direct .text if available (some SDK versions/shims)
+        if (!text && (response as any).text) {
+          text = typeof (response as any).text === 'function' ? await (response as any).text() : (response as any).text;
+        }
+
+        console.log(`[AI] Extracted text:`, text);
+        
+        return typeof text === 'string' ? text : "";
+      } catch (err: any) {
+        console.error(`[AI] Gemini Error:`, err);
+        throw err;
+      }
     });
   } else {
     return generateExternalResponse(model, prompt, systemInstruction);
@@ -52,15 +82,33 @@ export const generateWorkerResponse = async (model: string, prompt: string, syst
 
 export const generateThinkingResponse = async (prompt: string, systemInstruction?: string) => {
   const ai = getAiClient();
+  console.log(`[AI] Generating thinking response...`);
   return withRetry(async () => {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: prompt,
-      config: { 
-        systemInstruction
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: prompt,
+        config: { systemInstruction }
+      });
+      
+      let text = "";
+      // Use the same robust parsing logic
+      if (response.candidates && response.candidates.length > 0) {
+        const candidate = response.candidates[0];
+        if (candidate.content && candidate.content.parts && candidate.content.parts.length > 0) {
+          text = candidate.content.parts[0].text || "";
+        }
       }
-    });
-    return response.text;
+      
+      if (!text && (response as any).text) {
+        text = typeof (response as any).text === 'function' ? await (response as any).text() : (response as any).text;
+      }
+      
+      return typeof text === 'string' ? text : "";
+    } catch (err: any) {
+      console.error(`[AI] Thinking Mode Error:`, err);
+      throw err;
+    }
   });
 };
 

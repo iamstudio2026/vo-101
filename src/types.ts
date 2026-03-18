@@ -92,6 +92,10 @@ export interface ChatMessage {
   timestamp: number;
   type: 'public' | 'private';
   receiverId?: string;
+  isAi?: boolean;
+  isThinking?: boolean;
+  groundingUrls?: string[];
+  audioUrl?: string;
 }
 
 export interface Citizen extends Worker {
