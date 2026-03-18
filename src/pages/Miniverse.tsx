@@ -135,6 +135,9 @@ export const Miniverse: React.FC = () => {
   const [chatbotMessages, setChatbotMessages] = useState<{ role: 'user' | 'ai', text: string }[]>([]);
   const [chatbotInput, setChatbotInput] = useState('');
   const [isChatbotLoading, setIsChatbotLoading] = useState(false);
+  const [groupChannelInput, setGroupChannelInput] = useState('');
+  const [isSendingGroupMessage, setIsSendingGroupMessage] = useState(false);
+  const [groupChannelError, setGroupChannelError] = useState<string | null>(null);
   const [knowledge, setKnowledge] = useState<Knowledge[]>([]);
   const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
   const [newKnowledge, setNewKnowledge] = useState({ title: '', content: '', externalUrl: '' });
@@ -458,14 +461,22 @@ export const Miniverse: React.FC = () => {
   };
 
   const handleBroadcastMessage = async (message: string) => {
-    if (!currentOffice || !currentUser || currentOffice.status === 'closed') return;
+    if (!currentOffice || !currentUser || currentOffice.status === 'closed') {
+      setGroupChannelError('Office is closed or you are not authenticated');
+      return;
+    }
+
+    if (!message.trim()) return;
+
+    setIsSendingGroupMessage(true);
+    setGroupChannelError(null);
 
     // 1. Add user message to Firestore
     const userMsg = {
       officeId: currentOffice.id,
       senderId: currentUser.uid,
       senderName: currentUser.displayName || 'Admin',
-      message,
+      message: message.trim(),
       timestamp: Date.now(),
       type: 'public' as const,
       ownerId: currentUser.uid
@@ -473,25 +484,70 @@ export const Miniverse: React.FC = () => {
 
     try {
       await addDoc(collection(db, 'messages'), userMsg);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending message:', error);
+      setGroupChannelError(error.message || 'Failed to send message.');
+      setIsSendingGroupMessage(false);
       return;
     }
 
-    // 2. Trigger agent responses based on AI Mode
+    // 2. Trigger agent responses based on AI Mode & Mentions
     if (citizens.length > 0) {
-      const numResponders = Math.min(citizens.length, Math.floor(Math.random() * 2) + 1);
-      const shuffled = [...citizens].sort(() => 0.5 - Math.random());
-      const responders = shuffled.slice(0, numResponders);
+      // Check for mentions @Name
+      const mentionedAgent = citizens.find(c => message.toLowerCase().includes(`@${c.name.toLowerCase()}`));
+      
+      // Task Assignment detection
+      const taskKeywords = ['assign task', 'crea una tarea', 'create task', 'nueva tarea', 'task:'];
+      const isTaskAssignment = taskKeywords.some(k => message.toLowerCase().includes(k));
+
+      if (isTaskAssignment && mentionedAgent) {
+        try {
+          // Extract task title - everything after the keyword
+          const keywordUsed = taskKeywords.find(k => message.toLowerCase().includes(k)) || "";
+          const parts = message.toLowerCase().split(keywordUsed);
+          const taskTitle = parts[1]?.trim() || `Task from @${mentionedAgent.name}`;
+          
+          await handleCreateTask({
+            title: taskTitle,
+            description: `Interactively assigned via group chat: "${message}"`,
+            assignedTo: mentionedAgent.id,
+            officeId: currentOffice.id,
+            ownerId: currentUser.uid
+          });
+          
+          // Note for UI
+          console.log(`Auto-created task: ${taskTitle} assigned to ${mentionedAgent.name}`);
+        } catch (e) {
+          console.error("Auto-task creation failed:", e);
+        }
+      }
+
+      let responders: Citizen[] = [];
+      if (mentionedAgent) {
+        responders = [mentionedAgent];
+      } else {
+        // Randomly pick 1-2 responders if no specific mention
+        const numResponders = Math.min(citizens.length, Math.floor(Math.random() * 2) + 1);
+        const shuffled = [...citizens].sort(() => 0.5 - Math.random());
+        responders = shuffled.slice(0, numResponders);
+      }
 
       for (const agent of responders) {
+        // Artificial delay for realism
         setTimeout(async () => {
           try {
             let responseText = "";
             let groundingUrls: string[] = [];
-            const systemInstruction = `You are ${agent.name}, a ${agent.role} in a Virtual Office simulation. 
-              The Admin (user) just sent a message to the group channel: "${message}".
-              Respond briefly (max 20 words) and professionally, staying in character.`;
+            
+            // Instruction refinement: Tell them if they were mentioned or if it's a general task
+            const instructionPrefix = mentionedAgent?.id === agent.id 
+              ? "You were specifically mentioned in this message." 
+              : "This is a general message to the team.";
+            
+            const systemInstruction = `You are ${agent.name}, a ${agent.role} in a Virtual Office. 
+              ${instructionPrefix}
+              The Admin just sent: "${message}".
+              Respond briefly (max 25 words), stay in character. If you were assigned a task, acknowledge it.`;
 
             if (aiMode === 'thinking') {
               responseText = await aiService.generateThinkingResponse(message, systemInstruction) || "";
@@ -500,7 +556,8 @@ export const Miniverse: React.FC = () => {
               responseText = res.text || "";
               groundingUrls = res.groundingUrls;
             } else {
-              responseText = await aiService.generateFastResponse(message, systemInstruction, agent.model) || "";
+              // Use the worker response to handle external models if needed
+              responseText = await aiService.generateWorkerResponse(agent.model || "gemini-2.0-flash", message, systemInstruction) || "";
             }
 
             if (responseText) {
@@ -534,12 +591,16 @@ export const Miniverse: React.FC = () => {
                 audio.play();
               }
             }
-          } catch (error) {
+          } catch (error: any) {
             console.error("Agent Response Error:", error);
+            // Optionally notify the group about the failure specifically
+            setGroupChannelError(`Agent ${agent.name} failed to respond: ${error.message || 'AI Error'}`);
           }
         }, Math.random() * 2000 + 1000);
       }
     }
+    
+    setIsSendingGroupMessage(false);
   };
 
   useEffect(() => {
@@ -1755,18 +1816,45 @@ export const Miniverse: React.FC = () => {
                 <p className="text-[10px] text-slate-600 italic text-center py-4">No messages yet...</p>
               )}
             </div>
-            <div className="flex gap-1">
+            {groupChannelError && (
+              <div className="mb-2 p-2 bg-red-500/20 border border-red-500/50 rounded-lg text-[10px] text-red-300">
+                {groupChannelError}
+              </div>
+            )}
+            <div className="flex gap-2">
               <input 
                 type="text" 
-                placeholder={aiMode === 'maps' ? "Ask about locations..." : aiMode === 'thinking' ? "Ask complex questions..." : "Broadcast message..."}
-                className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-[10px] text-white outline-none focus:border-indigo-500"
+                value={groupChannelInput}
+                onChange={(e) => setGroupChannelInput(e.target.value)}
+                placeholder={currentOffice?.status === 'closed' ? 'Office is closed' : aiMode === 'maps' ? "Ask about locations..." : aiMode === 'thinking' ? "Ask complex questions..." : "Broadcast message..."}
+                disabled={isSendingGroupMessage || currentOffice?.status === 'closed'}
+                className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-[10px] text-white outline-none focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && e.currentTarget.value) {
-                    handleBroadcastMessage(e.currentTarget.value);
-                    e.currentTarget.value = '';
+                  if (e.key === 'Enter' && groupChannelInput.trim() && !isSendingGroupMessage) {
+                    handleBroadcastMessage(groupChannelInput.trim());
+                    setGroupChannelInput('');
                   }
                 }}
               />
+              <button
+                onClick={() => {
+                  if (groupChannelInput.trim()) {
+                    handleBroadcastMessage(groupChannelInput.trim());
+                    setGroupChannelInput('');
+                  }
+                }}
+                disabled={!groupChannelInput.trim() || isSendingGroupMessage || currentOffice?.status === 'closed'}
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold transition-colors flex items-center gap-1 min-w-[70px] justify-center"
+              >
+                {isSendingGroupMessage ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <>
+                    <Send className="w-3 h-3" />
+                    Send
+                  </>
+                )}
+              </button>
             </div>
           </div>
 

@@ -43,6 +43,7 @@ export interface Task {
   isRecurring?: boolean;
   frequency?: 'daily';
   lastCompletedAt?: string;
+  lastResentAt?: string;
   ownerId: string;
   createdAt: string;
 }

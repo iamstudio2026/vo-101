@@ -27,15 +27,7 @@ const withRetry = async <T>(fn: () => Promise<T>, retries = 3, delay = 2000): Pr
 };
 
 export const generateFastResponse = async (prompt: string, systemInstruction?: string, modelOverride?: string) => {
-  const ai = getAiClient();
-  return withRetry(async () => {
-    const response = await ai.models.generateContent({
-      model: modelOverride || "gemini-3.1-flash-lite-preview",
-      contents: prompt,
-      config: { systemInstruction }
-    });
-    return response.text;
-  });
+  return generateWorkerResponse(modelOverride || "gemini-2.0-flash", prompt, systemInstruction);
 };
 
 export const generateWorkerResponse = async (model: string, prompt: string, systemInstruction?: string) => {

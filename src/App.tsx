@@ -12,6 +12,7 @@ import { Tasks } from './pages/Tasks';
 import { AudioAnalyzer } from './pages/AudioAnalyzer';
 import { Miniverse } from './pages/Miniverse';
 import { Landing } from './pages/Landing';
+import { Archive } from './pages/Archive';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser, loading } = useAuth();
@@ -44,6 +45,7 @@ export default function App() {
                 <Route path="tasks" element={<Tasks />} />
                 <Route path="audio" element={<AudioAnalyzer />} />
                 <Route path="miniverse" element={<Miniverse />} />
+                <Route path="archive" element={<Archive />} />
               </Route>
               {/* Fallback for existing /landing links */}
               <Route path="/landing" element={<Navigate to="/" replace />} />

@@ -3,7 +3,7 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useOffice } from '../context/OfficeContext';
 import { logout } from '../firebase';
-import { Building2, Users, CheckSquare, Settings, LogOut, Mic, LayoutDashboard, Globe } from 'lucide-react';
+import { Building2, Users, CheckSquare, Settings, LogOut, Mic, LayoutDashboard, Globe, Archive as ArchiveIcon } from 'lucide-react';
 
 export const Layout: React.FC = () => {
   const { userProfile } = useAuth();
@@ -17,6 +17,7 @@ export const Layout: React.FC = () => {
     { name: 'Workers', href: '/app/workers', icon: Users },
     { name: 'Tasks', href: '/app/tasks', icon: CheckSquare },
     { name: 'Audio Analyzer', href: '/app/audio', icon: Mic },
+    { name: 'Archive', href: '/app/archive', icon: ArchiveIcon },
   ];
 
   return (
