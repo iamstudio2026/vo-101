@@ -21,6 +21,9 @@ service cloud.firestore {
     //   - name: string (required, size 1-100)
     //   - description: string (optional, size 0-500)
     //   - ownerId: string (required, matches auth.uid)
+    //   - memberIds: list (uids that share the office; set by vo101-engine)
+    //   - memberProfiles: map (uid -> {email, name}; set by vo101-engine)
+    //   - pendingEmails: list (invitations; set by vo101-engine)
     //   - createdAt: string (required)
     //
     // Collection: workers
@@ -155,48 +158,103 @@ service cloud.firestore {
     }
 
     // ===============================================================
+    // Office membership
+    // ===============================================================
+    // An office is shared by the people of the real office. offices/{id}.memberIds
+    // lists who may see and use it (the owner is always a member). Membership is
+    // changed only by vo101-engine (Admin SDK), never by a client, so nobody can add
+    // themselves to an office. Queries must filter by officeId (equality) so these
+    // rules can be evaluated for a whole result set.
+
+    function officeData(officeId) {
+      return get(/databases/$(database)/documents/offices/$(officeId)).data;
+    }
+
+    function isOfficeMember(officeId) {
+      return isAuthenticated() &&
+        (request.auth.uid in officeData(officeId).get('memberIds', []) ||
+         officeData(officeId).ownerId == request.auth.uid);
+    }
+
+    function isOfficeOwner(officeId) {
+      return isAuthenticated() && officeData(officeId).ownerId == request.auth.uid;
+    }
+
+    function membershipUntouched() {
+      return !request.resource.data.diff(resource.data).affectedKeys()
+        .hasAny(['ownerId', 'memberIds', 'memberProfiles', 'pendingEmails']);
+    }
+
+    // A task may be updated by any member (approve, re-queue, refine) but never moved
+    // to another office or re-attributed.
+    function isValidTaskUpdate(data) {
+      return data.keys().hasAll(['officeId', 'title', 'status', 'ownerId', 'createdAt']) &&
+             isValidString(data.title, 1, 200) &&
+             data.status in ['pending', 'todo', 'in-progress', 'done', 'archived'] &&
+             data.ownerId == resource.data.ownerId &&
+             data.officeId == resource.data.officeId;
+    }
+
+    // ===============================================================
     // Rules
     // ===============================================================
 
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) &&
                       (request.resource.data.role == resource.data.role || isAdmin());
     }
 
     match /offices/{officeId} {
-      allow read: if isDocOwner() || isAdmin();
-      allow create: if isAuthenticated() && isValidOffice(request.resource.data);
-      allow update: if isDocOwner() && isValidOffice(request.resource.data);
+      allow read: if isAdmin() ||
+        (isAuthenticated() &&
+          (resource.data.ownerId == request.auth.uid ||
+           request.auth.uid in resource.data.get('memberIds', [])));
+      allow create: if isAuthenticated() && isValidOffice(request.resource.data) &&
+        request.resource.data.get('memberIds', [request.auth.uid]) == [request.auth.uid] &&
+        !('memberProfiles' in request.resource.data) &&
+        !('pendingEmails' in request.resource.data);
+      // Owner edits the office; members may only open/close it.
+      allow update: if (isDocOwner() && isValidOffice(request.resource.data) && membershipUntouched()) ||
+        (isAuthenticated() && request.auth.uid in resource.data.get('memberIds', []) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']));
       allow delete: if isDocOwner() || isAdmin();
     }
 
     match /workers/{workerId} {
-      allow read: if isDocOwner() || isAdmin();
-      allow create: if isAuthenticated() && isValidWorker(request.resource.data);
-      allow update: if isDocOwner() && isValidWorker(request.resource.data);
-      allow delete: if isDocOwner() || isAdmin();
+      allow read: if isAdmin() || isOfficeMember(resource.data.officeId);
+      allow create: if isAuthenticated() && isValidWorker(request.resource.data) &&
+        isOfficeOwner(request.resource.data.officeId);
+      allow update: if isOfficeOwner(resource.data.officeId) && isValidWorker(request.resource.data) &&
+        request.resource.data.officeId == resource.data.officeId;
+      allow delete: if isAdmin() || isOfficeOwner(resource.data.officeId);
     }
 
     match /tasks/{taskId} {
-      allow read: if isDocOwner() || isAdmin();
-      allow create: if isAuthenticated() && isValidTask(request.resource.data);
-      allow update: if isDocOwner() && isValidTask(request.resource.data);
-      allow delete: if isDocOwner() || isAdmin();
+      allow read: if isAdmin() || isOfficeMember(resource.data.officeId);
+      allow create: if isAuthenticated() && isValidTask(request.resource.data) &&
+        isOfficeMember(request.resource.data.officeId);
+      allow update: if isOfficeMember(resource.data.officeId) && isValidTaskUpdate(request.resource.data);
+      allow delete: if isAdmin() || isDocOwner() || isOfficeOwner(resource.data.officeId);
     }
 
     match /messages/{messageId} {
-      allow read: if isDocOwner() || isAdmin();
-      allow create: if isAuthenticated() && isValidMessage(request.resource.data);
-      allow delete: if isDocOwner() || isAdmin();
+      allow read: if isAdmin() || isOfficeMember(resource.data.officeId);
+      // People speak for themselves; worker replies are written by the engine.
+      allow create: if isAuthenticated() && isValidMessage(request.resource.data) &&
+        request.resource.data.senderId == request.auth.uid &&
+        isOfficeMember(request.resource.data.officeId);
+      allow delete: if isAdmin() || isDocOwner() || isOfficeOwner(resource.data.officeId);
     }
 
     match /knowledge/{knowledgeId} {
-      allow read: if isDocOwner() || isAdmin();
-      allow create: if isAuthenticated() && isValidKnowledge(request.resource.data);
-      allow update: if isDocOwner() && isValidKnowledge(request.resource.data);
-      allow delete: if isDocOwner() || isAdmin();
+      allow read: if isAdmin() || isOfficeMember(resource.data.officeId);
+      allow create: if isAuthenticated() && isValidKnowledge(request.resource.data) &&
+        isOfficeMember(request.resource.data.officeId);
+      allow update: if isDocOwner() && isValidKnowledge(request.resource.data) &&
+        request.resource.data.officeId == resource.data.officeId;
+      allow delete: if isAdmin() || isDocOwner() || isOfficeOwner(resource.data.officeId);
     }
 
     // Default deny

@@ -35,7 +35,6 @@ export const Tasks: React.FC = () => {
 
     const qTasks = query(
       collection(db, 'tasks'),
-      where('ownerId', '==', currentUser.uid),
       where('officeId', '==', currentOffice.id)
     );
     const unsubTasks = onSnapshot(qTasks, (snapshot) => {
@@ -61,7 +60,6 @@ export const Tasks: React.FC = () => {
 
     const qWorkers = query(
       collection(db, 'workers'),
-      where('ownerId', '==', currentUser.uid),
       where('officeId', '==', currentOffice.id)
     );
     const unsubWorkers = onSnapshot(qWorkers, (snapshot) => {

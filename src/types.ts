@@ -13,6 +13,10 @@ export interface Office {
   status?: 'open' | 'closed';
   ownerId: string;
   createdAt: string;
+  // Shared office (managed by vo101-engine)
+  memberIds?: string[];
+  memberProfiles?: Record<string, { email: string; name?: string }>;
+  pendingEmails?: string[];
 }
 
 export interface Worker {

@@ -491,7 +491,6 @@ export const Miniverse: React.FC = () => {
 
     const q = query(
       collection(db, 'workers'),
-      where('ownerId', '==', currentUser.uid),
       where('officeId', '==', currentOffice.id)
     );
 
@@ -524,7 +523,6 @@ export const Miniverse: React.FC = () => {
 
     const tasksQuery = query(
       collection(db, 'tasks'),
-      where('ownerId', '==', currentUser.uid),
       where('officeId', '==', currentOffice.id)
     );
 
@@ -561,7 +559,6 @@ export const Miniverse: React.FC = () => {
     const knowledgeQuery = query(
       collection(db, 'knowledge'),
       where('officeId', '==', currentOffice.id),
-      where('ownerId', '==', currentUser.uid),
       orderBy('createdAt', 'desc'),
       limit(20)
     );

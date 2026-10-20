@@ -45,7 +45,6 @@ export const Workers: React.FC = () => {
     }
     const q = query(
       collection(db, 'workers'),
-      where('ownerId', '==', currentUser.uid),
       where('officeId', '==', currentOffice.id)
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -146,6 +145,12 @@ export const Workers: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-1">
+          {currentOffice.ownerId !== currentUser?.uid ? (
+            <div className="bg-indigo-50 p-6 rounded-2xl border border-indigo-100 text-sm text-indigo-800">
+              Oficina compartida contigo: puedes ver a los workers, asignarles tareas y hablar con ellos.
+              Solo el dueño de la oficina los crea o modifica.
+            </div>
+          ) : (
           <form onSubmit={handleCreate} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
             <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
               <Plus className="w-5 h-5 text-emerald-500" />
@@ -228,6 +233,7 @@ export const Workers: React.FC = () => {
               </button>
             </div>
           </form>
+          )}
         </div>
 
         <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">

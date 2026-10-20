@@ -3,6 +3,7 @@ import { User as FirebaseUser, onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { User } from '../types';
+import { claimInvites } from '../services/engine';
 
 interface AuthContextType {
   currentUser: FirebaseUser | null;
@@ -23,6 +24,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
+        // Join offices that invited this email (no-op if none). Never blocks sign-in.
+        claimInvites().catch(() => {});
         const userRef = doc(db, 'users', user.uid);
         try {
           const userSnap = await getDoc(userRef);

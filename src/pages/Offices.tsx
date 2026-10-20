@@ -6,6 +6,7 @@ import { collection, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestor
 import { Building2, Plus, Trash2, Edit2, X, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { OperationType, Office } from '../types';
+import { OfficeMembers } from '../components/OfficeMembers';
 
 export const Offices: React.FC = () => {
   const { currentUser } = useAuth();
@@ -26,6 +27,7 @@ export const Offices: React.FC = () => {
         name: name.trim(),
         description: description.trim(),
         ownerId: currentUser.uid,
+        memberIds: [currentUser.uid],
         createdAt: new Date().toISOString(),
       });
       setName('');
@@ -185,6 +187,11 @@ export const Offices: React.FC = () => {
                           </span>
                         </div>
                         {office.description && <p className="text-slate-500 mt-1">{office.description}</p>}
+                        {office.ownerId !== currentUser?.uid && (
+                          <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">
+                            Oficina compartida contigo
+                          </span>
+                        )}
                         <div className="flex items-center gap-4 mt-2">
                           <p className="text-xs text-slate-400">Created: {new Date(office.createdAt).toLocaleDateString()}</p>
                           <button
@@ -205,9 +212,10 @@ export const Offices: React.FC = () => {
                             {office.status === 'closed' ? 'Open Office' : 'Close Office'}
                           </button>
                         </div>
+                        {currentUser && <OfficeMembers office={office} currentUid={currentUser.uid} />}
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className={`flex gap-2 ${office.ownerId === currentUser?.uid ? '' : 'hidden'}`}>
                       <button
                         onClick={() => startEditing(office)}
                         className="p-2 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"

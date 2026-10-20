@@ -25,7 +25,6 @@ export const Archive: React.FC = () => {
 
     const q = query(
       collection(db, 'tasks'),
-      where('ownerId', '==', currentUser.uid),
       where('officeId', '==', currentOffice.id),
       where('collected', '==', true),
       orderBy('createdAt', 'desc')

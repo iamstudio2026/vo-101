@@ -12,15 +12,19 @@ export class EngineError extends Error {
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
+  return request<T>('POST', path, body);
+}
+
+async function request<T>(method: 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> {
   const user = auth.currentUser;
   if (!user) throw new EngineError(401, 'Inicia sesión para usar la IA.');
   const token = await user.getIdToken();
   let res: Response;
   try {
     res = await fetch(`${ENGINE_URL}/v1${path}`, {
-      method: 'POST',
+      method,
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify(body),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
   } catch {
     throw new EngineError(0, 'No se pudo contactar al motor de NEXUS.');
@@ -62,3 +66,17 @@ export const chatRespond = (officeId: string, message: string, workerId?: string
     worker_id: workerId ?? null,
     deep,
   });
+
+// --- Shared office: members ----------------------------------------------------
+/** Owner only. An existing verified account is added; otherwise an invitation is left. */
+export const inviteMember = (officeId: string, email: string) =>
+  post<{ status: 'added' | 'invited'; email: string; uid?: string }>(`/offices/${encodeURIComponent(officeId)}/members`, { email });
+
+export const removeMember = (officeId: string, memberUid: string) =>
+  request<{ removed: string }>('DELETE', `/offices/${encodeURIComponent(officeId)}/members/${encodeURIComponent(memberUid)}`);
+
+export const cancelInvite = (officeId: string, email: string) =>
+  request<{ cancelled: string }>('DELETE', `/offices/${encodeURIComponent(officeId)}/invites?email=${encodeURIComponent(email)}`);
+
+/** After sign-in: join the offices that invited this (verified) email. */
+export const claimInvites = () => post<{ joined: string[] }>('/me/claim-invites', {});

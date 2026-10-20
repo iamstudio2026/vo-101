@@ -21,7 +21,6 @@ export const Dashboard: React.FC = () => {
 
     const workersQuery = query(
       collection(db, 'workers'),
-      where('ownerId', '==', currentUser.uid),
       where('officeId', '==', currentOffice.id)
     );
     const unsubWorkers = onSnapshot(workersQuery, (snapshot) => {
@@ -30,7 +29,6 @@ export const Dashboard: React.FC = () => {
 
     const tasksQuery = query(
       collection(db, 'tasks'),
-      where('ownerId', '==', currentUser.uid),
       where('officeId', '==', currentOffice.id)
     );
     const unsubTasks = onSnapshot(tasksQuery, (snapshot) => {
@@ -39,7 +37,6 @@ export const Dashboard: React.FC = () => {
 
     const recentTasksQuery = query(
       collection(db, 'tasks'),
-      where('ownerId', '==', currentUser.uid),
       where('officeId', '==', currentOffice.id),
       orderBy('createdAt', 'desc'),
       limit(5)
