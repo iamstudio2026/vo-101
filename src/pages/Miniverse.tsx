@@ -16,6 +16,8 @@ declare global {
 import { motion, AnimatePresence } from 'framer-motion';
 import { Monitor, Coffee, MessageSquare, Brain, AlertCircle, User, CheckSquare, ListTodo, Play, CheckCircle2, Package, X, ArrowRight, Archive, FileText, ExternalLink, Download, ClipboardCheck, Loader2, Sparkles, Terminal, Code, Cpu, Zap, Github, BookOpen, Image as ImageIcon, MapPin, Volume2, VolumeX, Send, Wand2 as WandIcon, Book, Plus, Trash2, Users, File, Link, HardDrive, Share2, Upload, Eye, Accessibility, Hand, Mic, FileAudio, Search, PenTool, BarChart3, Sun, Database, Mail, Layers, ShieldCheck, Hourglass, ThumbsUp, RotateCcw } from 'lucide-react';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { downloadDeliverablePdf } from '../lib/exportPdf';
 import * as engine from '../services/engine';
 import { approveTask, requestChanges, requeueTask as requeueTaskDoc, REQUEUE_FIELDS } from '../services/taskActions';
 import { isAwaitingApproval, isLive, pickTaskToPlay, scriptFor, SCENES, step, type Station } from '../lib/choreography';
@@ -2024,7 +2026,7 @@ export const Miniverse: React.FC = () => {
               </div>
 
               <div className="p-8">
-                <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 font-mono text-sm text-slate-700 whitespace-pre-wrap min-h-[200px] max-h-[400px] overflow-y-auto relative">
+                <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 text-sm text-slate-700 min-h-[200px] max-h-[400px] overflow-y-auto relative leading-relaxed [&_h1]:text-lg [&_h1]:font-bold [&_h2]:font-bold [&_h2]:mt-3 [&_h3]:font-semibold [&_p]:my-2 [&_ul]:list-disc [&_ul]:ml-5 [&_ol]:list-decimal [&_ol]:ml-5 [&_table]:w-full [&_table]:my-2 [&_table]:text-xs [&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-100 [&_th]:px-2 [&_th]:py-1 [&_td]:border [&_td]:border-slate-200 [&_td]:px-2 [&_td]:py-1 [&_pre]:whitespace-pre-wrap [&_code]:font-mono">
                   {liveViewing && !liveViewing.result && (liveViewing.status === 'todo' || liveViewing.status === 'in-progress') && !liveViewing.failed ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm">
                       <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-2" />
@@ -2033,7 +2035,7 @@ export const Miniverse: React.FC = () => {
                       </p>
                     </div>
                   ) : liveViewing?.result ? (
-                    liveViewing.result
+                    <Markdown remarkPlugins={[remarkGfm]}>{liveViewing.result}</Markdown>
                   ) : (
                     <div className="flex flex-col items-center justify-center h-full py-12 text-center">
                       <Brain className="w-12 h-12 text-slate-200 mb-4" />
@@ -2119,11 +2121,21 @@ export const Miniverse: React.FC = () => {
                     Copy Content
                   </button>
                   <button
+                    onClick={() => liveViewing?.result && downloadDeliverablePdf({
+                      title: liveViewing.title,
+                      body: liveViewing.result,
+                      worker: citizens.find(c => c.id === liveViewing.assignedTo)?.name,
+                      office: currentOffice?.name,
+                      date: (liveViewing.executedAt || liveViewing.createdAt || '').slice(0, 10),
+                      model: liveViewing.modelUsed,
+                      reviewVerdict: liveViewing.review?.verdict,
+                      approvedByUser: liveViewing.approval === 'approved',
+                    })}
                     disabled={!liveViewing?.result}
                     className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50"
                   >
                     <Download className="w-4 h-4" />
-                    Download PDF
+                    Descargar PDF
                   </button>
                 </div>
               </div>
@@ -2536,7 +2548,7 @@ export const Miniverse: React.FC = () => {
                           {uploadingFile ? <Loader2 className="w-6 h-6 animate-spin text-indigo-600" /> : <Upload className="w-6 h-6 text-slate-400 group-hover:text-indigo-600" />}
                         </div>
                         <p className="text-sm font-bold text-slate-900 mb-1">Upload File</p>
-                        <p className="text-[10px] text-slate-500 text-center">PDF, DOCX, TXT (Max 750KB)</p>
+                        <p className="text-[10px] text-slate-500 text-center">PDF, DOCX, TXT, MD, CSV (máx. 750KB) · los agentes leen su contenido</p>
                       </div>
                     )}
 
@@ -2547,7 +2559,7 @@ export const Miniverse: React.FC = () => {
                             {isDriveLoading ? <Loader2 className="w-6 h-6 animate-spin text-emerald-600" /> : <HardDrive className="w-6 h-6 text-emerald-500" />}
                           </div>
                           <p className="text-sm font-bold text-slate-900 mb-1">Browse Google Drive</p>
-                          <p className="text-[10px] text-slate-500">Select files directly from your account</p>
+                          <p className="text-[10px] text-slate-500">Guarda un enlace de Drive como referencia (los agentes no lo abren; sube el archivo para que lo lean)</p>
                         </div>
 
                         <div className="relative">
@@ -2598,7 +2610,7 @@ export const Miniverse: React.FC = () => {
                             <p className="text-xs font-bold text-slate-900">NotebookLM Integration</p>
                           </div>
                           <p className="text-[10px] text-slate-600 leading-relaxed">
-                            Connect your NotebookLM notebooks to give agents deep context from your curated sources. Paste the shareable link below.
+                            Guarda el enlace como referencia. Los agentes NO pueden abrir NotebookLM: solo verán el enlace. Para que usen su contenido, exporta tus notas a texto o PDF y súbelas en la pestaña de archivos.
                           </p>
                         </div>
 
