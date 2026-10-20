@@ -421,35 +421,11 @@ export const Miniverse: React.FC = () => {
     if (citizens.length > 0) {
       // Check for mentions @Name
       const mentionedAgent = citizens.find(c => message.toLowerCase().includes(`@${c.name.toLowerCase()}`));
-      
-      // Task Assignment detection
-      const taskKeywords = ['assign task', 'crea una tarea', 'create task', 'nueva tarea', 'task:'];
-      const isTaskAssignment = taskKeywords.some(k => message.toLowerCase().includes(k));
-
-      if (isTaskAssignment && mentionedAgent) {
-        try {
-          // Extract task title - everything after the keyword
-          const keywordUsed = taskKeywords.find(k => message.toLowerCase().includes(k)) || "";
-          const parts = message.toLowerCase().split(keywordUsed);
-          const taskTitle = parts[1]?.trim() || `Task from @${mentionedAgent.name}`;
-          
-          await handleCreateTask({
-            title: taskTitle,
-            description: `Interactively assigned via group chat: "${message}"`,
-            assignedTo: mentionedAgent.id,
-            officeId: currentOffice.id,
-            ownerId: currentUser.uid
-          });
-          
-          // Note for UI
-          console.log(`Auto-created task: ${taskTitle} assigned to ${mentionedAgent.name}`);
-        } catch (e) {
-          console.error("Auto-task creation failed:", e);
-        }
-      }
 
       // One reply: the mentioned worker, or the engine picks the office's first worker.
-      // The engine writes the reply to Firestore; the messages listener shows it.
+      // The engine also decides whether the message asks for a deliverable and, if so,
+      // creates the task itself — keyword matching here missed "apóyame con…" and the
+      // worker promised work that never ran.
       engine.chatRespond(currentOffice.id, message.trim(), mentionedAgent?.id, aiMode === 'thinking')
         .catch((error: Error) => {
           console.error('[Chat] Engine error:', error);

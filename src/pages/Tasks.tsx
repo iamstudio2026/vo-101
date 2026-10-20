@@ -164,12 +164,15 @@ export const Tasks: React.FC = () => {
       }
     } catch (error) {
       console.error('Refine task error:', error);
+      alert(`No se pudo refinar: ${error instanceof Error ? error.message : 'error desconocido'}`);
     } finally {
       setAiLoading(false);
     }
   };
 
-  const handleRefineExistingTask = async (id: string, title: string, currentDesc: string) => {
+  // Same argument order as TaskCard's onRefineTask(title, desc, id). They used to differ,
+  // so the update targeted a document named after the task title and failed silently.
+  const handleRefineExistingTask = async (title: string, currentDesc: string, id: string) => {
     setAiLoading(true);
     try {
       const refined = (await engine.refineTask(title, currentDesc)).description.trim();
@@ -178,6 +181,7 @@ export const Tasks: React.FC = () => {
       }
     } catch (error) {
       console.error('Refine existing task error:', error);
+      alert(`No se pudo refinar la tarea: ${error instanceof Error ? error.message : 'error desconocido'}`);
     } finally {
       setAiLoading(false);
     }
