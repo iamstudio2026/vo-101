@@ -54,6 +54,14 @@ export interface Task {
   modelUsed?: string;
   fellBack?: boolean;
   executedAt?: string;
+  phase?: 'queued' | 'claimed' | 'executing' | 'reviewing' | 'revising' | 'done' | 'awaiting_approval' | 'failed';
+  phaseAt?: string;
+  phaseLog?: { phase: string; at: string; [extra: string]: unknown }[];
+  review?: { verdict: 'approved' | 'changes_requested' | 'unavailable'; issues?: string[]; summary?: string; model?: string; error?: string };
+  revisions?: number;
+  approval?: 'pending' | 'approved' | 'changes_requested';
+  humanFeedback?: string;
+  truncated?: boolean;
 }
 
 export enum OperationType {
@@ -121,7 +129,7 @@ export interface Citizen extends Worker {
   y: number;
   targetX: number;
   targetY: number;
-  currentAction: 'idle' | 'working' | 'thinking' | 'walking' | 'error' | 'chatting' | 'delivering' | 'looking_around' | 'stretching' | 'interacting' | 'discussing';
+  currentAction: 'idle' | 'working' | 'thinking' | 'walking' | 'error' | 'chatting' | 'delivering' | 'looking_around' | 'stretching' | 'interacting' | 'discussing' | 'reviewing' | 'waiting_approval';
   chattingWith?: string;
   chatTimer?: number;
   idleActionTimer?: number;
@@ -129,6 +137,9 @@ export interface Citizen extends Worker {
   workProgress?: number;
   isAssignedWork?: boolean;
   currentTaskId?: string;
+  // Task choreography (lib/choreography.ts)
+  playhead?: { beatIndex: number; arrivedAt?: number };
+  sceneLabel?: string;
   targetFurnitureId?: string;
   isDiscussing?: boolean;
   discussionWith?: string;

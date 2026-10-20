@@ -4,9 +4,11 @@ import { useOffice } from '../context/OfficeContext';
 import { db, handleFirestoreError } from '../firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, deleteField } from 'firebase/firestore';
 import { Task, Worker, OperationType } from '../types';
-import { CheckSquare, Plus, Trash2, Clock, CheckCircle2, Circle, Sparkles, Loader2, Wand2 } from 'lucide-react';
+import { CheckSquare, Plus, Trash2, Clock, CheckCircle2, Circle, Sparkles, Loader2, Wand2, ShieldCheck, Hourglass, ThumbsUp, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as engine from '../services/engine';
+import { approveTask, requestChanges } from '../services/taskActions';
+import { SCENES } from '../lib/choreography';
 
 export const Tasks: React.FC = () => {
   const { currentUser } = useAuth();
@@ -537,7 +539,62 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, workers, onStatusChange, onDe
                 Assigned to: <strong className="text-slate-700">{workers.find(w => w.id === task.assignedTo)?.name || 'Unknown'}</strong>
               </span>
             )}
+
+            {task.phase && task.phase !== 'done' && (
+              <span className={`text-xs font-medium px-2 py-1 rounded-md flex items-center gap-1 ${
+                task.phase === 'awaiting_approval' ? 'bg-amber-100 text-amber-800' :
+                task.phase === 'failed' ? 'bg-rose-100 text-rose-700' : 'bg-indigo-50 text-indigo-700'
+              }`}>
+                {task.phase === 'awaiting_approval' ? <Hourglass className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}
+                {SCENES[task.phase]?.label ?? task.phase}
+              </span>
+            )}
+
+            {task.review && (
+              <span
+                title={[task.review.summary, ...(task.review.issues || [])].filter(Boolean).join('\n')}
+                className={`text-xs font-medium px-2 py-1 rounded-md flex items-center gap-1 ${
+                  task.review.verdict === 'approved' ? 'bg-emerald-50 text-emerald-700' :
+                  task.review.verdict === 'changes_requested' ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-500'
+                }`}
+              >
+                <ShieldCheck className="w-3 h-3" />
+                {task.review.verdict === 'approved' ? 'Revisado' :
+                 task.review.verdict === 'changes_requested' ? 'Revisión con observaciones' : 'Sin revisión'}
+              </span>
+            )}
+
+            {task.approval === 'approved' && (
+              <span className="text-xs font-medium px-2 py-1 rounded-md flex items-center gap-1 bg-emerald-100 text-emerald-800">
+                <ThumbsUp className="w-3 h-3" /> Aprobada por ti
+              </span>
+            )}
           </div>
+
+          {task.phase === 'awaiting_approval' && task.approval === 'pending' && (
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
+              {!!task.review?.issues?.length && (
+                <p className="w-full text-xs text-amber-800">⚠ {task.review.issues[0]}</p>
+              )}
+              <button
+                onClick={() => approveTask(task.id).catch(e => alert(`No se pudo aprobar: ${e.message}`))}
+                className="text-xs font-bold bg-emerald-600 text-white px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-emerald-500"
+              >
+                <ThumbsUp className="w-3 h-3" /> Aprobar
+              </button>
+              <button
+                onClick={() => {
+                  const notes = window.prompt('¿Qué hay que cambiar? El worker corregirá sobre este entregable.');
+                  if (notes && notes.trim()) {
+                    requestChanges(task.id, notes).catch(e => alert(`No se pudo enviar: ${e.message}`));
+                  }
+                }}
+                className="text-xs font-bold bg-white border border-amber-300 text-amber-900 px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-amber-50"
+              >
+                <RotateCcw className="w-3 h-3" /> Pedir cambios
+              </button>
+            </div>
+          )}
         </div>
       </div>
       <button

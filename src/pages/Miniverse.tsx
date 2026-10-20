@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useOffice } from '../context/OfficeContext';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, deleteDoc, orderBy, limit, deleteField } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, deleteDoc, orderBy, limit } from 'firebase/firestore';
 import { Worker, Task, Citizen, ChatMessage, Knowledge, Office, Furniture } from '../types';
 
 declare global {
@@ -14,18 +14,11 @@ declare global {
 }
 
 import { motion, AnimatePresence } from 'framer-motion';
-import { Monitor, Coffee, MessageSquare, Brain, AlertCircle, User, CheckSquare, ListTodo, Play, CheckCircle2, Package, X, ArrowRight, Archive, FileText, ExternalLink, Download, ClipboardCheck, Loader2, Sparkles, Terminal, Code, Cpu, Zap, Github, BookOpen, Image as ImageIcon, MapPin, Volume2, VolumeX, Send, Wand2 as WandIcon, Book, Plus, Trash2, Users, File, Link, HardDrive, Share2, Upload, Eye, Accessibility, Hand, Mic, FileAudio, Search, PenTool, BarChart3, Sun, Database, Mail, Layers } from 'lucide-react';
+import { Monitor, Coffee, MessageSquare, Brain, AlertCircle, User, CheckSquare, ListTodo, Play, CheckCircle2, Package, X, ArrowRight, Archive, FileText, ExternalLink, Download, ClipboardCheck, Loader2, Sparkles, Terminal, Code, Cpu, Zap, Github, BookOpen, Image as ImageIcon, MapPin, Volume2, VolumeX, Send, Wand2 as WandIcon, Book, Plus, Trash2, Users, File, Link, HardDrive, Share2, Upload, Eye, Accessibility, Hand, Mic, FileAudio, Search, PenTool, BarChart3, Sun, Database, Mail, Layers, ShieldCheck, Hourglass, ThumbsUp, RotateCcw } from 'lucide-react';
 import Markdown from 'react-markdown';
 import * as engine from '../services/engine';
-
-// Fields the engine uses to schedule a task; cleared when the user re-queues one.
-const REQUEUE_FIELDS = {
-  status: 'todo' as const,
-  attempts: 0,
-  failed: false,
-  lastError: deleteField(),
-  notBefore: deleteField(),
-};
+import { approveTask, requestChanges, requeueTask as requeueTaskDoc, REQUEUE_FIELDS } from '../services/taskActions';
+import { isAwaitingApproval, isLive, pickTaskToPlay, scriptFor, SCENES, step, type Station } from '../lib/choreography';
 
 const copyToClipboard = (text: string) => {
   if (navigator.clipboard && window.isSecureContext) {
@@ -53,6 +46,7 @@ const OFFICE_AREAS = [
   
   { id: 'optic', name: 'Pabellón de Renderizado', description: 'Optic Studio. Los agentes diseccionan y mejoran la estética visual para crear interfaces y arte de vanguardia.', x: 0, y: 5, w: 4, h: 4, color: 'bg-purple-500/5', border: 'border-purple-200/50', text: 'text-purple-600', icon: ImageIcon },
   { id: 'sonic', name: 'Laboratorio de Resonancia', description: 'Sonic Lab. Paneles de ondas de luz insonorizados donde se procesa audio y se transforman frecuencias en texto.', x: 8, y: 5, w: 4, h: 4, color: 'bg-blue-500/5', border: 'border-blue-200/50', text: 'text-blue-600', icon: Mic },
+  { id: 'qa', name: 'Aduana de Calidad', description: 'Control de Calidad. Un revisor independiente coteja cada entregable con lo pedido antes de que salga de la oficina.', x: 12, y: 5, w: 4, h: 4, color: 'bg-yellow-500/5', border: 'border-yellow-200/50', text: 'text-yellow-600', icon: ShieldCheck },
   { id: 'dispatch', name: 'Centro de Despacho', description: 'Hub de Distribución. La central logística encargada de enviar los resultados procesados al mundo exterior.', x: 16, y: 5, w: 4, h: 5, color: 'bg-emerald-500/5', border: 'border-emerald-200/50', text: 'text-emerald-600', icon: Send },
   
   { id: 'forge', name: 'La Fragua Creativa', description: 'Creative Forge. El taller de narrativa donde las ideas se funden en informes detallados y contenido persuasivo.', x: 0, y: 10, w: 4, h: 5, color: 'bg-rose-500/5', border: 'border-rose-200/50', text: 'text-rose-600', icon: PenTool },
@@ -93,6 +87,14 @@ const getDepartmentArea = (deptId: string) => {
   };
 };
 
+const TASK_WALK_STEP = 0.4; // cells per tick (500 ms) while acting out a task
+const IDLE_WALK_STEP = 0.1;
+
+const areaCenter = (id: string) => {
+  const a = OFFICE_AREAS.find(x => x.id === id)!;
+  return { x: a.x + a.w / 2 - 0.5, y: a.y + a.h / 2 - 0.5 };
+};
+
 const FURNITURE: Furniture[] = [
   { id: 'f1', name: 'Coffee Machine', x: 18, y: 1, icon: Coffee, type: 'coffee' },
   { id: 'f2', name: 'Server Rack', x: 5, y: 1, icon: Cpu, type: 'server' },
@@ -102,6 +104,46 @@ const FURNITURE: Furniture[] = [
   { id: 'f6', name: 'Office Printer', x: 17, y: 6, icon: Download, type: 'printer' },
   { id: 'f7', name: 'Archive Monitor', x: 1, y: 1, icon: Monitor, type: 'monitor' },
 ];
+
+// Where an avatar stands for each scene. A small per-avatar offset keeps several
+// avatars at the same station from stacking on one tile.
+const stationPosition = (station: Station, task: Task | undefined, c: Citizen, slot: number) => {
+  const jitter = { x: (slot % 3) * 0.6 - 0.6, y: Math.floor(slot / 3) * 0.6 };
+  if (station === 'here') return { x: c.x, y: c.y };
+  if (station === 'department') {
+    const deptId = task ? getTaskDepartment(task.title, task.description) : 'logic';
+    const furniture =
+      deptId === 'optic' ? FURNITURE.find(f => f.type === 'canvas') :
+      deptId === 'sonic' ? FURNITURE.find(f => f.type === 'server') :
+      deptId === 'logic' ? FURNITURE.find(f => f.type === 'terminal') :
+      deptId === 'archive' ? FURNITURE.find(f => f.type === 'monitor') : undefined;
+    if (furniture) return { x: furniture.x + jitter.x, y: furniture.y + 1 + jitter.y };
+    const d = getDepartmentArea(deptId);
+    return { x: d.x + d.width / 2 + jitter.x, y: d.y + d.height / 2 + jitter.y };
+  }
+  if (station === 'storage') return { x: STORAGE_AREA.x + STORAGE_AREA.width / 2, y: STORAGE_AREA.y + STORAGE_AREA.height / 2 };
+  const center = areaCenter(station === 'qa' ? 'qa' : 'dispatch');
+  return { x: center.x + jitter.x, y: center.y + jitter.y };
+};
+
+const moveCitizen = (c: Citizen, stepSize: number) => {
+  if (c.x === c.targetX && c.y === c.targetY) return;
+  const dx = c.targetX - c.x;
+  const dy = c.targetY - c.y;
+  c.x = Math.abs(dx) <= stepSize ? c.targetX : c.x + Math.sign(dx) * stepSize;
+  c.y = Math.abs(dy) <= stepSize ? c.targetY : c.y + Math.sign(dy) * stepSize;
+  if (c.x === c.targetX && c.y === c.targetY && c.currentAction === 'walking') c.currentAction = 'idle';
+};
+
+const releaseFromTask = (c: Citizen) => {
+  c.currentTaskId = undefined;
+  c.isAssignedWork = false;
+  c.playhead = undefined;
+  c.sceneLabel = undefined;
+  c.hasProduct = false;
+  c.workProgress = 0;
+  c.currentAction = 'idle';
+};
 
 const CHAT_PROXIMITY = 1.2; // Distance to trigger chat
 const CHAT_DURATION = 50; // Ticks (approx 5 seconds at 100ms interval)
@@ -140,6 +182,8 @@ export const Miniverse: React.FC = () => {
   const [groupChannelInput, setGroupChannelInput] = useState('');
   const [isSendingGroupMessage, setIsSendingGroupMessage] = useState(false);
   const [groupChannelError, setGroupChannelError] = useState<string | null>(null);
+  const [changeNotes, setChangeNotes] = useState('');
+  const [isSubmittingApproval, setIsSubmittingApproval] = useState(false);
   const [serverTime, setServerTime] = useState<number>(new Date().getHours()); // 0-23
   const [knowledge, setKnowledge] = useState<Knowledge[]>([]);
   const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
@@ -155,6 +199,9 @@ export const Miniverse: React.FC = () => {
   
   // Refs for simulation loop to avoid stale closures
   const tasksRef = useRef<Task[]>([]);
+  // Choreography: results finished while this page is open are replayed once each.
+  const playedRef = useRef<Set<string>>(new Set());
+  const sessionStartRef = useRef<number>(Date.now());
   const officeRef = useRef<Office | null>(null);
 
   useEffect(() => {
@@ -572,40 +619,67 @@ export const Miniverse: React.FC = () => {
         for (let i = 0; i < next.length; i++) {
           const c = next[i];
 
-          // Task visualisation. The engine claims and runs tasks; the simulation only
-          // mirrors Firestore state and never writes task status itself.
-          if (c.currentAction === 'idle' && !c.isAssignedWork) {
-            const taskToStart = (tasksRef.current || []).find(t =>
-              t.assignedTo === c.id && (t.status === 'todo' || t.status === 'in-progress') && !t.failed
-            );
-
-            if (taskToStart) {
-              const deptId = getTaskDepartment(taskToStart.title, taskToStart.description);
-              const targetDept = getDepartmentArea(deptId);
-              
+          // ── Task choreography ─────────────────────────────────────────────────
+          // The engine claims and runs tasks; the avatar acts out the task's phaseLog
+          // (lib/choreography.ts) and never writes task state itself.
+          const now = Date.now();
+          const allTasks = tasksRef.current || [];
+          if (!c.currentTaskId) {
+            const pick = pickTaskToPlay(allTasks, c.id, playedRef.current, sessionStartRef.current);
+            if (pick) {
+              const beats = scriptFor(pick);
+              // An old pending approval: go straight to waiting instead of replaying the past.
+              const startAt = isAwaitingApproval(pick) && Date.parse(pick.phaseAt || '') < sessionStartRef.current
+                ? beats.length - 1 : 0;
+              c.currentTaskId = pick.id;
               c.isAssignedWork = true;
-              c.workProgress = 0;
-              c.hasProduct = false;
-              c.currentTaskId = taskToStart.id;
-              c.currentAction = 'thinking'; // Set to 'Analizando' first
-              
-              // Move to the specific department for this task
-              c.targetX = targetDept.x + Math.random() * targetDept.width;
-              c.targetY = targetDept.y + Math.random() * targetDept.height;
-
-              // Set a short timer to switch from thinking to walking
-              c.idleActionTimer = 15; 
-              continue;
+              c.playhead = { beatIndex: startAt };
+              c.chatTimer = 0;
+              c.chattingWith = undefined;
+              c.isDiscussing = false;
             }
           }
-
-          // Handle 'thinking' state before moving
-          if (c.currentAction === 'thinking' && c.isAssignedWork) {
-            if (c.idleActionTimer && c.idleActionTimer > 0) {
-              c.idleActionTimer--;
-              continue;
+          if (c.currentTaskId) {
+            const t = allTasks.find(x => x.id === c.currentTaskId);
+            if (!t || t.assignedTo !== c.id) {
+              releaseFromTask(c);
             } else {
-              c.currentAction = 'walking';
+              // Waiting for approval must not hide new live work from this avatar.
+              if (isAwaitingApproval(t) && !isLive(t)) {
+                const live = allTasks.find(x => x.assignedTo === c.id && isLive(x));
+                if (live) {
+                  c.currentTaskId = live.id;
+                  c.playhead = { beatIndex: 0 };
+                }
+              }
+              const current = allTasks.find(x => x.id === c.currentTaskId)!;
+              const beats = scriptFor(current);
+              const idx = Math.min(c.playhead?.beatIndex ?? 0, beats.length - 1);
+              const slot = i;
+              const here = stationPosition(SCENES[beats[idx].phase as keyof typeof SCENES]?.station ?? 'here', current, c, slot);
+              const arrived = Math.hypot(c.x - here.x, c.y - here.y) < 0.5;
+              const result = step(current, c.playhead ?? { beatIndex: 0 }, arrived, now);
+              if (result.kind === 'finished') {
+                playedRef.current.add(current.id);
+                releaseFromTask(c);
+              } else {
+                c.playhead = result.playhead;
+                c.sceneLabel = result.scene.label;
+                c.workProgress = result.scene.progress;
+                c.hasProduct = result.beat.phase === 'done';
+                const target = stationPosition(result.scene.station, current, c, slot);
+                if (Math.hypot(c.x - target.x, c.y - target.y) >= 0.5) {
+                  c.targetX = target.x;
+                  c.targetY = target.y;
+                  c.currentAction = 'walking';
+                } else {
+                  c.targetX = c.x;
+                  c.targetY = c.y;
+                  c.currentAction = result.scene.action;
+                }
+              }
+              moveCitizen(c, TASK_WALK_STEP);
+              continue;
             }
           }
 
@@ -632,75 +706,7 @@ export const Miniverse: React.FC = () => {
             }
           }
 
-          // Work Assignment Logic (Functional Furniture)
-          if (c.isAssignedWork) {
-            const currentTask = (tasksRef.current || []).find(t => t.id === c.currentTaskId);
-            const taskGone = !currentTask || currentTask.failed || currentTask.assignedTo !== c.id ||
-              !['todo', 'in-progress', 'done'].includes(currentTask.status);
-            if (taskGone && !c.hasProduct) {
-              // Deleted, failed or reassigned while we were animating: go back to idle.
-              c.isAssignedWork = false;
-              c.currentTaskId = undefined;
-              c.workProgress = 0;
-              c.currentAction = 'idle';
-            } else if (!c.hasProduct) {
-              const taskToStart = currentTask;
-              const deptId = taskToStart ? getTaskDepartment(taskToStart.title, taskToStart.description) : 'logic';
-              const targetDept = getDepartmentArea(deptId);
-              
-              // Target specific furniture based on task type
-              let targetFurniture: Furniture | undefined;
-              if (deptId === 'optic') targetFurniture = FURNITURE.find(f => f.type === 'canvas');
-              if (deptId === 'sonic') targetFurniture = FURNITURE.find(f => f.type === 'server');
-              if (deptId === 'logic') targetFurniture = FURNITURE.find(f => f.type === 'terminal');
-              if (deptId === 'archive') targetFurniture = FURNITURE.find(f => f.type === 'monitor');
-
-              const targetPos = targetFurniture ? { x: targetFurniture.x, y: targetFurniture.y } : { x: targetDept.x + targetDept.width /2, y: targetDept.y + targetDept.height / 2 };
-
-              const distToTarget = Math.sqrt(Math.pow(c.x - targetPos.x, 2) + Math.pow(c.y - targetPos.y, 2));
-
-              if (distToTarget > 0.5) {
-                if (c.currentAction !== 'walking') {
-                  c.targetX = targetPos.x;
-                  c.targetY = targetPos.y;
-                  c.currentAction = 'walking';
-                }
-              } else {
-                c.currentAction = 'working';
-                // Progress is cosmetic: it waits at 95% until the engine marks the task done.
-                const engineDone = currentTask?.status === 'done';
-                c.workProgress = Math.min(engineDone ? 100 : 95, (c.workProgress || 0) + 1.5);
-                if (c.workProgress >= 100) {
-                  c.hasProduct = true;
-                  c.workProgress = 0;
-                  c.currentAction = 'delivering';
-                }
-              }
-            } else {
-              // Move to Storage Area (Vault or Printer)
-              const targetPos = { x: STORAGE_AREA.x + STORAGE_AREA.width / 2, y: STORAGE_AREA.y + STORAGE_AREA.height / 2 };
-              const distToTarget = Math.sqrt(Math.pow(c.x - targetPos.x, 2) + Math.pow(c.y - targetPos.y, 2));
-              
-              if (distToTarget > 0.5) {
-                c.targetX = targetPos.x;
-                c.targetY = targetPos.y;
-                c.currentAction = 'walking';
-              } else {
-                c.hasProduct = false;
-                c.isAssignedWork = false; 
-                c.currentTaskId = undefined;
-                c.currentAction = 'idle';
-                
-                // Final interaction with printer if applicable
-                const printer = FURNITURE.find(f => f.type === 'printer');
-                if (printer) {
-                  c.targetX = printer.x;
-                  c.targetY = printer.y;
-                  c.currentAction = 'walking';
-                }
-              }
-            }
-          } else {
+          {
             // Collaboration Logic (Agent-Agent Discussion)
             if (Math.random() < 0.03 && !c.isDiscussing) {
               const otherAgent = next.find((other, idx) => idx !== i && other.currentAction === 'idle' && !other.isAssignedWork && !other.isDiscussing);
@@ -765,7 +771,9 @@ export const Miniverse: React.FC = () => {
                 c.targetY = Math.max(0, Math.min(WORLD_HEIGHT - 1, c.y + (Math.random() > 0.5 ? 1 : -1)));
                 c.currentAction = 'walking';
               } else if (Math.random() < 0.05) {
-                c.currentAction = Math.random() > 0.5 ? 'thinking' : 'working';
+                // Idle fidgets only: "Analizando/Procesando" are reserved for real task phases.
+                c.currentAction = Math.random() > 0.5 ? 'looking_around' : 'stretching';
+                c.idleActionTimer = 10;
               } else if (Math.random() < 0.05) {
                 const idleActions: ('looking_around' | 'stretching' | 'interacting')[] = ['looking_around', 'stretching', 'interacting'];
                 const selectedAction = idleActions[Math.floor(Math.random() * idleActions.length)];
@@ -803,20 +811,7 @@ export const Miniverse: React.FC = () => {
           }
 
           // Movement execution
-          if (c.x !== c.targetX || c.y !== c.targetY) {
-            if (c.x < c.targetX) c.x += 0.1;
-            else if (c.x > c.targetX) c.x -= 0.1;
-            
-            if (c.y < c.targetY) c.y += 0.1;
-            else if (c.y > c.targetY) c.y -= 0.1;
-
-            if (Math.abs(c.x - c.targetX) < 0.1) c.x = c.targetX;
-            if (Math.abs(c.y - c.targetY) < 0.1) c.y = c.targetY;
-            
-            if (c.x === c.targetX && c.y === c.targetY && c.currentAction === 'walking') {
-              c.currentAction = 'idle';
-            }
-          }
+          moveCitizen(c, IDLE_WALK_STEP);
         }
 
         return next;
@@ -842,10 +837,7 @@ export const Miniverse: React.FC = () => {
   // Re-run a task: back to the engine's queue with a clean retry budget.
   const requeueTask = async (task: Task) => {
     try {
-      await updateDoc(doc(db, 'tasks', task.id), {
-        ...REQUEUE_FIELDS,
-        ...(task.assignedTo ? {} : { autoAssign: true }),
-      });
+      await requeueTaskDoc(task.id, !task.assignedTo);
       setViewingTaskResult(null);
     } catch (error: any) {
       console.error("Error re-queueing task:", error);
@@ -995,6 +987,33 @@ export const Miniverse: React.FC = () => {
   if (!currentOffice) {
     return <div className="p-8 text-center text-slate-500">Select an office to enter the Virtual Office.</div>;
   }
+
+  // The result modal follows the live task, so approval and revisions show up as they happen.
+  const liveViewing = viewingTaskResult ? (tasks.find(t => t.id === viewingTaskResult.id) ?? viewingTaskResult) : null;
+
+  const handleApprove = async (task: Task) => {
+    setIsSubmittingApproval(true);
+    try {
+      await approveTask(task.id);
+    } catch (e) {
+      alert(`No se pudo aprobar: ${e instanceof Error ? e.message : 'error'}`);
+    } finally {
+      setIsSubmittingApproval(false);
+    }
+  };
+
+  const handleRequestChanges = async (task: Task) => {
+    if (!changeNotes.trim()) return;
+    setIsSubmittingApproval(true);
+    try {
+      await requestChanges(task.id, changeNotes);
+      setChangeNotes('');
+    } catch (e) {
+      alert(`No se pudo enviar: ${e instanceof Error ? e.message : 'error'}`);
+    } finally {
+      setIsSubmittingApproval(false);
+    }
+  };
 
   const hour = serverTime;
   const isNight = hour >= 20 || hour <= 6;
@@ -1257,11 +1276,12 @@ export const Miniverse: React.FC = () => {
                 <motion.div
                   key={citizen.id}
                   className="absolute cursor-pointer group"
-                  style={{ 
-                    left: citizen.x * gridSize, 
+                  style={{
+                    left: citizen.x * gridSize,
                     top: citizen.y * gridSize,
                     width: gridSize,
                     height: gridSize,
+                    transition: 'left 0.5s linear, top 0.5s linear',
                   }}
                   onClick={() => setSelectedCitizen(citizen)}
                   animate={{ x: 0, y: 0 }} // Handled by style for smoother 0.1 increments
@@ -1323,6 +1343,37 @@ export const Miniverse: React.FC = () => {
                         <Accessibility className="w-3 h-3 text-emerald-500" />
                       </motion.div>
                     )}
+                    {citizen.currentAction === 'reviewing' && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0 }}
+                        animate={{ opacity: 1, scale: 1, y: -22 }}
+                        exit={{ opacity: 0, scale: 0 }}
+                        className="absolute -top-6 left-1/2 -translate-x-1/2 bg-yellow-400 text-white rounded-full p-1.5 shadow-lg border-2 border-white"
+                      >
+                        <ShieldCheck className="w-3 h-3" />
+                      </motion.div>
+                    )}
+                    {citizen.currentAction === 'waiting_approval' && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0 }}
+                        animate={{ opacity: 1, scale: [1, 1.15, 1], y: -24 }}
+                        transition={{ scale: { repeat: Infinity, duration: 1.4 } }}
+                        exit={{ opacity: 0, scale: 0 }}
+                        className="absolute -top-6 left-1/2 -translate-x-1/2 bg-amber-500 text-white rounded-full p-1.5 shadow-lg border-2 border-white"
+                      >
+                        <Hourglass className="w-3 h-3" />
+                      </motion.div>
+                    )}
+                    {citizen.currentAction === 'error' && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0 }}
+                        animate={{ opacity: 1, scale: 1, y: -22 }}
+                        exit={{ opacity: 0, scale: 0 }}
+                        className="absolute -top-6 left-1/2 -translate-x-1/2 bg-rose-500 text-white rounded-full p-1.5 shadow-lg border-2 border-white"
+                      >
+                        <AlertCircle className="w-3 h-3" />
+                      </motion.div>
+                    )}
                     {citizen.currentAction === 'interacting' && (
                       <motion.div 
                         initial={{ opacity: 0, scale: 0 }}
@@ -1337,27 +1388,35 @@ export const Miniverse: React.FC = () => {
 
                   {/* Action Badge & AI Status */}
                   <div className="absolute -top-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 pointer-events-none">
-                    {citizen.isAssignedWork && !tasks.find(t => t.id === citizen.currentTaskId)?.result && (
-                      <motion.div 
+                    {citizen.isAssignedWork && citizen.currentTaskId && (
+                      <motion.div
                         initial={{ scale: 0, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
-                        className="bg-indigo-500 text-white text-[7px] px-1.5 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-lg whitespace-nowrap"
+                        className="bg-slate-900/80 text-white text-[7px] px-1.5 py-0.5 rounded-full font-bold flex items-center gap-1 shadow-lg whitespace-nowrap max-w-[120px]"
                       >
-                        <Sparkles className="w-2 h-2 animate-pulse" />
-                        AI Thinking...
+                        <Sparkles className="w-2 h-2 animate-pulse shrink-0" />
+                        <span className="truncate">{tasks.find(t => t.id === citizen.currentTaskId)?.title}</span>
                       </motion.div>
                     )}
                     <div className={`px-1.5 py-0.5 rounded-full text-[7px] font-bold uppercase tracking-tighter shadow-sm border ${
+                      citizen.currentAction === 'reviewing' ? 'bg-yellow-400 text-white border-yellow-300' :
+                      citizen.currentAction === 'waiting_approval' ? 'bg-amber-500 text-white border-amber-400 animate-pulse' :
+                      citizen.currentAction === 'delivering' ? 'bg-amber-600 text-white border-amber-500' :
+                      citizen.currentAction === 'error' ? 'bg-rose-500 text-white border-rose-400' :
                       citizen.currentAction === 'working' ? 'bg-emerald-500 text-white border-emerald-400' :
                       citizen.currentAction === 'thinking' ? 'bg-indigo-500 text-white border-indigo-400' :
                       citizen.currentAction === 'walking' ? 'bg-slate-700 text-white border-slate-600' :
                       ['looking_around', 'stretching', 'interacting'].includes(citizen.currentAction) ? 'bg-amber-400 text-white border-amber-300' :
                       'bg-white text-slate-400 border-slate-100'
                     }`}>
-                      {citizen.currentAction === 'working' ? 'Procesando' : 
+                      {citizen.sceneLabel && citizen.currentAction !== 'walking' ? citizen.sceneLabel :
+                       citizen.sceneLabel ? `→ ${citizen.sceneLabel}` :
+                       citizen.currentAction === 'working' ? 'Procesando' :  
                        citizen.currentAction === 'thinking' ? 'Analizando' : 
                        ['idle', 'looking_around', 'stretching', 'interacting'].includes(citizen.currentAction) ? 'En espera' : 
-                       citizen.currentAction.replace('_', ' ')}
+                       ({ walking: 'Caminando', chatting: 'Charlando', discussing: 'Conversando',
+                          delivering: 'Entregando', error: 'Error' } as Record<string, string>)[citizen.currentAction]
+                         ?? citizen.currentAction.replace('_', ' ')}
                     </div>
                     <div className="mt-0.5 px-1 py-0.5 rounded-full bg-slate-800/50 text-white text-[5px] font-bold uppercase tracking-widest">
                       Interactive
@@ -1397,6 +1456,15 @@ export const Miniverse: React.FC = () => {
                         } :
                         citizen.currentAction === 'interacting' ? {
                           x: [-1, 1, -1, 1, 0]
+                        } :
+                        citizen.currentAction === 'reviewing' ? {
+                          rotate: [0, -8, 0, 8, 0]
+                        } :
+                        citizen.currentAction === 'waiting_approval' ? {
+                          y: [0, -3, 0]
+                        } :
+                        citizen.currentAction === 'working' ? {
+                          y: [0, -1, 0]
                         } :
                         { y: 0, rotate: 0, scale: 1, x: 0 }
                       }
@@ -1805,7 +1873,7 @@ export const Miniverse: React.FC = () => {
                         </span>
                       </div>
                       <div className="flex justify-between mb-1 text-slate-500">
-                        <span>Progress</span>
+                        <span>{selectedCitizen?.sceneLabel || 'Progress'}</span>
                         <span className="font-bold text-indigo-600">{Math.round(selectedCitizen?.workProgress || 0)}%</span>
                       </div>
                       <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
@@ -1957,25 +2025,25 @@ export const Miniverse: React.FC = () => {
 
               <div className="p-8">
                 <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 font-mono text-sm text-slate-700 whitespace-pre-wrap min-h-[200px] max-h-[400px] overflow-y-auto relative">
-                  {viewingTaskResult && !viewingTaskResult.result && (viewingTaskResult.status === 'todo' || viewingTaskResult.status === 'in-progress') && !viewingTaskResult.failed ? (
+                  {liveViewing && !liveViewing.result && (liveViewing.status === 'todo' || liveViewing.status === 'in-progress') && !liveViewing.failed ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm">
                       <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-2" />
                       <p className="text-xs font-bold text-slate-500 animate-pulse">
-                        {viewingTaskResult.status === 'in-progress' ? 'El motor está ejecutando la tarea…' : 'En cola del motor…'}
+                        {liveViewing.status === 'in-progress' ? 'El motor está ejecutando la tarea…' : 'En cola del motor…'}
                       </p>
                     </div>
-                  ) : viewingTaskResult?.result ? (
-                    viewingTaskResult.result
+                  ) : liveViewing?.result ? (
+                    liveViewing.result
                   ) : (
                     <div className="flex flex-col items-center justify-center h-full py-12 text-center">
                       <Brain className="w-12 h-12 text-slate-200 mb-4" />
                       <p className="text-slate-400 mb-6">
-                        {viewingTaskResult?.failed
-                          ? `La tarea falló varias veces: ${viewingTaskResult.lastError || 'error del motor'}`
+                        {liveViewing?.failed
+                          ? `La tarea falló varias veces: ${liveViewing.lastError || 'error del motor'}`
                           : 'No content generated for this task yet.'}
                       </p>
                       <button
-                        onClick={() => viewingTaskResult && requeueTask(viewingTaskResult)}
+                        onClick={() => liveViewing && requeueTask(liveViewing)}
                         className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20"
                       >
                         <Zap className="w-4 h-4" />
@@ -1985,21 +2053,73 @@ export const Miniverse: React.FC = () => {
                   )}
                 </div>
                 
+                {liveViewing?.review && (
+                  <div className={`mt-4 rounded-2xl border p-4 text-xs ${
+                    liveViewing.review.verdict === 'approved' ? 'bg-emerald-50 border-emerald-100 text-emerald-800' :
+                    liveViewing.review.verdict === 'changes_requested' ? 'bg-amber-50 border-amber-100 text-amber-900' :
+                    'bg-slate-50 border-slate-100 text-slate-600'
+                  }`}>
+                    <div className="flex items-center gap-2 font-bold mb-1">
+                      <ShieldCheck className="w-4 h-4" />
+                      {liveViewing.review.verdict === 'approved' ? 'Revisión: aprobado' :
+                       liveViewing.review.verdict === 'changes_requested' ? 'Revisión: encontró problemas' :
+                       'Revisión no disponible'}
+                      {!!liveViewing.revisions && <span className="font-normal opacity-70">· {liveViewing.revisions} corrección(es)</span>}
+                    </div>
+                    {liveViewing.review.summary && <p>{liveViewing.review.summary}</p>}
+                    {!!liveViewing.review.issues?.length && (
+                      <ul className="list-disc ml-5 mt-1 space-y-0.5">
+                        {liveViewing.review.issues.map((issue, k) => <li key={k}>{issue}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                {liveViewing?.phase === 'awaiting_approval' && liveViewing.approval === 'pending' && (
+                  <div className="mt-4 rounded-2xl border-2 border-amber-200 bg-amber-50/60 p-4">
+                    <p className="text-xs font-bold text-amber-900 flex items-center gap-2 mb-3">
+                      <Hourglass className="w-4 h-4" /> Este entregable espera tu visto bueno
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleApprove(liveViewing)}
+                        disabled={isSubmittingApproval}
+                        className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-emerald-500 disabled:opacity-50"
+                      >
+                        <ThumbsUp className="w-4 h-4" /> Aprobar
+                      </button>
+                    </div>
+                    <textarea
+                      value={changeNotes}
+                      onChange={(e) => setChangeNotes(e.target.value)}
+                      placeholder="¿Qué hay que cambiar? (el worker corregirá sobre este entregable)"
+                      className="mt-3 w-full text-xs rounded-xl border border-amber-200 bg-white p-2 h-16 outline-none focus:border-amber-400"
+                    />
+                    <button
+                      onClick={() => handleRequestChanges(liveViewing)}
+                      disabled={isSubmittingApproval || !changeNotes.trim()}
+                      className="mt-2 w-full py-2 bg-white border border-amber-300 text-amber-900 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-amber-100 disabled:opacity-50"
+                    >
+                      <RotateCcw className="w-4 h-4" /> Pedir cambios
+                    </button>
+                  </div>
+                )}
+
                 <div className="mt-6 flex gap-3">
                   <button
                     onClick={() => {
-                      if (viewingTaskResult?.result) {
-                        copyToClipboard(viewingTaskResult.result);
+                      if (liveViewing?.result) {
+                        copyToClipboard(liveViewing.result);
                       }
                     }}
-                    disabled={!viewingTaskResult?.result}
+                    disabled={!liveViewing?.result}
                     className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-200 transition-all disabled:opacity-50"
                   >
                     <ClipboardCheck className="w-4 h-4" />
                     Copy Content
                   </button>
                   <button
-                    disabled={!viewingTaskResult?.result}
+                    disabled={!liveViewing?.result}
                     className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50"
                   >
                     <Download className="w-4 h-4" />
@@ -2011,7 +2131,7 @@ export const Miniverse: React.FC = () => {
               <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-center">
                 <p className="text-[10px] text-slate-400 flex items-center gap-1">
                   <Brain className="w-3 h-3" />
-                  Processed by Miniverse Agent Intelligence
+                  {liveViewing?.modelUsed ? `Hecho con ${liveViewing.modelUsed}${liveViewing.fellBack ? ' (modelo de respaldo)' : ''}` : 'Processed by Miniverse Agent Intelligence'}
                 </p>
               </div>
             </motion.div>
