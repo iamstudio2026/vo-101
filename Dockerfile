@@ -3,35 +3,20 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
-
-# Install dependencies (use ci for deterministic builds from lock file)
 RUN npm ci
 
-# Copy source code
 COPY . .
 
-# Build the application
-# Note: Ensure all VITE_ environment variables are available during build time
-ARG VITE_OPENROUTER_API_KEY
-ARG VITE_GEMINI_API_KEY
-ENV VITE_OPENROUTER_API_KEY=$VITE_OPENROUTER_API_KEY
-ENV VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
-
-# Build the application
-RUN npm run build && ls -la /app/dist
+# No model API keys at build time: anything VITE_* ends up in the public bundle.
+# AI calls go to vo101-engine through nginx (/engine/v1/).
+RUN npm run build
 
 # Production stage
 FROM nginx:stable-alpine
 
-# Copy built assets from build stage
 COPY --from=build /app/dist /usr/share/nginx/html
-
-# Set broad permissions for web files
-RUN chmod -R 777 /usr/share/nginx/html
-
-# Copy custom nginx config
+RUN chmod -R a+rX /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80

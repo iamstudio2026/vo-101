@@ -24,10 +24,10 @@ jobs:
             # Stop host Nginx if it's running and taking port 80
             sudo systemctl stop nginx || true
             sudo systemctl disable nginx || true
-            docker-compose down
-            # Create a temporary .env for the build if needed, or pass via build-args
-            docker-compose build --build-arg VITE_OPENROUTER_API_KEY=${{ secrets.VITE_OPENROUTER_API_KEY }} --build-arg VITE_GEMINI_API_KEY=${{ secrets.VITE_GEMINI_API_KEY }}
-            docker-compose up -d
+            docker compose down
+            # No model keys in the build: the browser bundle is public.
+            docker compose build
+            docker compose up -d
             docker ps
             docker logs --tail 20 vo-101-app-1 || true
             docker system prune -f

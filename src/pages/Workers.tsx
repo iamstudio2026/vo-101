@@ -15,7 +15,7 @@ export const Workers: React.FC = () => {
   const [role, setRole] = useState('');
   const [skills, setSkills] = useState('');
   const [responsibilities, setResponsibilities] = useState('');
-  const [model, setModel] = useState('gemini-2.0-flash');
+  const [model, setModel] = useState('google/gemini-3.1-flash-lite');
   const [isEnabled, setIsEnabled] = useState(true);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -23,17 +23,19 @@ export const Workers: React.FC = () => {
   const [editRole, setEditRole] = useState('');
   const [editSkills, setEditSkills] = useState('');
   const [editResponsibilities, setEditResponsibilities] = useState('');
-  const [editModel, setEditModel] = useState('gemini-2.0-flash');
+  const [editModel, setEditModel] = useState('google/gemini-3.1-flash-lite');
   const [editIsEnabled, setEditIsEnabled] = useState(true);
 
+  // OpenRouter ids, checked against /api/v1/models on 2026-10-20. Pinned versions, not
+  // "~…-latest" aliases. Retired ids still stored on old workers are remapped by the engine.
   const AVAILABLE_MODELS = [
-    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Fast)' },
-    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (Smart)' },
-    { id: 'deepseek/deepseek-chat', name: 'DeepSeek V3' },
-    { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1 (Reasoning)' },
-    { id: 'qwen/qwen-2.5-72b-instruct', name: 'Qwen 2.5 72B (KM 2.5)' },
-    { id: 'meta-llama/llama-3.1-405b-instruct', name: 'Llama 3.1 405B' },
-    { id: 'google/gemini-2.0-pro-exp-02-05:free', name: 'Gemini 2.0 Pro (Experimental)' }
+    { id: 'google/gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite (rápido)' },
+    { id: 'google/gemini-3.5-flash', name: 'Gemini 3.5 Flash' },
+    { id: 'anthropic/claude-haiku-5.5', name: 'Claude Haiku 5.5 (rápido)' },
+    { id: 'anthropic/claude-sonnet-5.5', name: 'Claude Sonnet 5.5 (análisis)' },
+    { id: 'deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro (razonamiento)' },
+    { id: 'qwen/qwen3.8-27b', name: 'Qwen 3.8 27B (código)' },
+    { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B' },
   ];
 
   useEffect(() => {
@@ -80,7 +82,7 @@ export const Workers: React.FC = () => {
       setRole('');
       setSkills('');
       setResponsibilities('');
-      setModel('gemini-2.0-flash');
+      setModel('google/gemini-3.1-flash-lite');
       setIsEnabled(true);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'workers');
@@ -95,7 +97,7 @@ export const Workers: React.FC = () => {
     setEditRole(worker.role);
     setEditSkills(worker.skills?.join(', ') || '');
     setEditResponsibilities(worker.responsibilities || '');
-    setEditModel(worker.model || 'gemini-2.0-flash');
+    setEditModel(worker.model || 'google/gemini-3.1-flash-lite');
     setEditIsEnabled(worker.isEnabled !== false);
   };
 

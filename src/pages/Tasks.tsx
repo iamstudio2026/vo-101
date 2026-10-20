@@ -2,13 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useOffice } from '../context/OfficeContext';
 import { db, handleFirestoreError } from '../firebase';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, deleteField } from 'firebase/firestore';
 import { Task, Worker, OperationType } from '../types';
 import { CheckSquare, Plus, Trash2, Clock, CheckCircle2, Circle, Sparkles, Loader2, Wand2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GoogleGenAI, Type } from '@google/genai';
-
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+import * as engine from '../services/engine';
 
 export const Tasks: React.FC = () => {
   const { currentUser } = useAuth();
@@ -48,7 +46,7 @@ export const Tasks: React.FC = () => {
           const lastDate = new Date(task.lastCompletedAt).toDateString();
           if (lastDate !== today) {
             try {
-              await updateDoc(doc(db, 'tasks', task.id), { status: 'todo' });
+              await updateDoc(doc(db, 'tasks', task.id), { status: 'todo', attempts: 0, failed: false, lastError: deleteField(), notBefore: deleteField() });
             } catch (err) {
               console.error("Failed to reset daily task:", err);
             }
@@ -89,6 +87,7 @@ export const Tasks: React.FC = () => {
         title: title.trim(),
         description: description.trim(),
         assignedTo: assignedTo || null,
+        autoAssign: !assignedTo,
         status: 'todo',
         isRecurring,
         frequency: isRecurring ? frequency : null,
@@ -110,20 +109,8 @@ export const Tasks: React.FC = () => {
     if (workers.length === 0) return;
     setAiLoading(true);
     try {
-      const workerContext = workers.map(w => ({
-        id: w.id,
-        name: w.name,
-        role: w.role,
-        skills: w.skills?.join(', ') || 'None'
-      }));
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Given this task: "${taskTitle}" (${taskDesc}), and these workers: ${JSON.stringify(workerContext)}, which worker is the best fit? Return ONLY the worker ID.`,
-      });
-
-      const suggestedId = response.text?.trim() || '';
-      const found = workers.find(w => w.id === suggestedId || (suggestedId && suggestedId.includes(w.id)));
+      const { worker_id } = await engine.suggestWorker(currentOffice!.id, taskTitle, taskDesc);
+      const found = workers.find(w => w.id === worker_id);
       if (found) {
         setAssignedTo(found.id);
       }
@@ -138,28 +125,7 @@ export const Tasks: React.FC = () => {
     if (!flowPrompt.trim() || !currentUser || !currentOffice) return;
     setAiLoading(true);
     try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Generate a sequence of 3-5 tasks to achieve this goal: "${flowPrompt}". Return a JSON array of objects with "title" and "description" fields.`,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                title: { type: Type.STRING },
-                description: { type: Type.STRING }
-              },
-              required: ['title', 'description']
-            }
-          }
-        }
-      });
-
-      const text = response.text;
-      if (!text) throw new Error('No response from AI');
-      const newTasksData = JSON.parse(text);
+      const { tasks: newTasksData } = await engine.planFlow(currentOffice.id, flowPrompt.trim());
       const batch = writeBatch(db);
       const flowId = `flow_${Date.now()}`;
       const flowName = flowPrompt.trim().substring(0, 50) + (flowPrompt.length > 50 ? '...' : '');
@@ -169,6 +135,7 @@ export const Tasks: React.FC = () => {
         batch.set(docRef, {
           ...t,
           status: 'todo',
+          autoAssign: true,
           flowId,
           flowName,
           officeId: currentOffice.id,
@@ -191,11 +158,7 @@ export const Tasks: React.FC = () => {
     if (!currentTitle.trim()) return;
     setAiLoading(true);
     try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite-preview',
-        contents: `Refine this task into a one-paragraph actionable instruction for an AI agent: Title: "${currentTitle}", Current Description: "${currentDesc}". Focus on what the final result should be. Return ONLY the refined description.`,
-      });
-      const refined = response.text?.trim() || '';
+      const refined = (await engine.refineTask(currentTitle, currentDesc)).description.trim();
       if (refined) {
         setDescription(refined);
       }
@@ -209,11 +172,7 @@ export const Tasks: React.FC = () => {
   const handleRefineExistingTask = async (id: string, title: string, currentDesc: string) => {
     setAiLoading(true);
     try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite-preview',
-        contents: `Refine this task into a one-paragraph actionable instruction for an AI agent: Title: "${title}", Current Description: "${currentDesc}". Return ONLY the refined description.`,
-      });
-      const refined = response.text?.trim() || '';
+      const refined = (await engine.refineTask(title, currentDesc)).description.trim();
       if (refined) {
         await updateDoc(doc(db, 'tasks', id), { description: refined });
       }
@@ -227,6 +186,10 @@ export const Tasks: React.FC = () => {
   const handleStatusChange = async (id: string, newStatus: 'todo' | 'in-progress' | 'done') => {
     try {
       const updates: any = { status: newStatus };
+      if (newStatus === 'todo') {
+        // Back to the engine's queue with a clean retry budget
+        Object.assign(updates, { attempts: 0, failed: false, lastError: deleteField(), notBefore: deleteField() });
+      }
       if (newStatus === 'done') {
         updates.lastCompletedAt = new Date().toISOString();
       }

@@ -1,16 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Mic, Upload, FileAudio, Loader2, Save, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GoogleGenAI } from '@google/genai';
 import Markdown from 'react-markdown';
 import { useAuth } from '../context/AuthContext';
 import { useOffice } from '../context/OfficeContext';
 import { db, handleFirestoreError } from '../firebase';
 import { collection, addDoc } from 'firebase/firestore';
 import { OperationType } from '../types';
-
-// Initialize Gemini API
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+import * as engine from '../services/engine';
 
 export const AudioAnalyzer: React.FC = () => {
   const { currentUser } = useAuth();
@@ -56,24 +53,7 @@ export const AudioAnalyzer: React.FC = () => {
     try {
       const base64Data = await fileToBase64(file);
       
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: {
-          parts: [
-            {
-              inlineData: {
-                data: base64Data,
-                mimeType: file.type || 'audio/mp3',
-              },
-            },
-            {
-              text: 'Summarize this audio and provide insights. Analyze the content, extract key points, and suggest how this information can be useful for the virtual office and its workers.',
-            },
-          ],
-        },
-      });
-
-      const text = response.text;
+      const { text } = await engine.analyzeAudio(base64Data, file.type || 'audio/mpeg');
       if (text) {
         setSummary(text);
       } else {
@@ -81,11 +61,7 @@ export const AudioAnalyzer: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Error analyzing audio:', err);
-      if (err.message?.includes('429') || err.message?.includes('RESOURCE_EXHAUSTED')) {
-        setError('Quota exceeded for the AI model. Please wait a moment and try again.');
-      } else {
-        setError('Failed to analyze the audio. Please ensure it is a valid audio file and try again.');
-      }
+      setError(err?.message || 'No se pudo analizar el audio.');
     } finally {
       setLoading(false);
     }

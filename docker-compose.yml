@@ -1,15 +1,16 @@
-version: '3.8'
-
 services:
   app:
-    build: 
+    build:
       context: .
-      args:
-        - VITE_OPENROUTER_API_KEY=${VITE_OPENROUTER_API_KEY}
-        - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
     ports:
       - "80:80"
     restart: always
-    environment:
-      - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
-      - VITE_OPENROUTER_API_KEY=${VITE_OPENROUTER_API_KEY}
+    networks:
+      - default
+      - engine_net
+
+# vo101_engine lives on this network; nginx proxies /engine/v1/ to it.
+networks:
+  engine_net:
+    external: true
+    name: fase1-fundaciones_proxy_net

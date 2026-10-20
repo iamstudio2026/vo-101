@@ -46,6 +46,14 @@ export interface Task {
   lastResentAt?: string;
   ownerId: string;
   createdAt: string;
+  // Written by vo101-engine
+  autoAssign?: boolean;
+  attempts?: number;
+  failed?: boolean;
+  lastError?: string;
+  modelUsed?: string;
+  fellBack?: boolean;
+  executedAt?: string;
 }
 
 export enum OperationType {

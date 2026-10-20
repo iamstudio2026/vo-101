@@ -3,8 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useOffice } from '../context/OfficeContext';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, deleteDoc, orderBy, limit } from 'firebase/firestore';
-import { Worker, Task, AspectRatio, Citizen, ChatMessage, Knowledge, Office, Furniture } from '../types';
+import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, deleteDoc, orderBy, limit, deleteField } from 'firebase/firestore';
+import { Worker, Task, Citizen, ChatMessage, Knowledge, Office, Furniture } from '../types';
 
 declare global {
   interface Window {
@@ -15,9 +15,17 @@ declare global {
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { Monitor, Coffee, MessageSquare, Brain, AlertCircle, User, CheckSquare, ListTodo, Play, CheckCircle2, Package, X, ArrowRight, Archive, FileText, ExternalLink, Download, ClipboardCheck, Loader2, Sparkles, Terminal, Code, Cpu, Zap, Github, BookOpen, Image as ImageIcon, MapPin, Volume2, VolumeX, Send, Wand2 as WandIcon, Book, Plus, Trash2, Users, File, Link, HardDrive, Share2, Upload, Eye, Accessibility, Hand, Mic, FileAudio, Search, PenTool, BarChart3, Sun, Database, Mail, Layers } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
 import Markdown from 'react-markdown';
-import * as aiService from '../services/aiService';
+import * as engine from '../services/engine';
+
+// Fields the engine uses to schedule a task; cleared when the user re-queues one.
+const REQUEUE_FIELDS = {
+  status: 'todo' as const,
+  attempts: 0,
+  failed: false,
+  lastError: deleteField(),
+  notBefore: deleteField(),
+};
 
 const copyToClipboard = (text: string) => {
   if (navigator.clipboard && window.isSecureContext) {
@@ -108,13 +116,9 @@ export const Miniverse: React.FC = () => {
   const [selectedCitizen, setSelectedCitizen] = useState<Citizen | null>(null);
   const [showStorageModal, setShowStorageModal] = useState(false);
   const [viewingTaskResult, setViewingTaskResult] = useState<Task | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [groupMessages, setGroupMessages] = useState<ChatMessage[]>([]);
-  const [worldTheme, setWorldTheme] = useState('Cozy Startup Office');
-  const [isGeneratingWorld, setIsGeneratingWorld] = useState(false);
+  const [worldTheme] = useState('Cozy Startup Office');
   const [showQuickstart, setShowQuickstart] = useState(false);
-  const [showWorldGen, setShowWorldGen] = useState(false);
-  const [worldPrompt, setWorldPrompt] = useState('');
   const [showVisionModal, setShowVisionModal] = useState(false);
   const [showAudioModal, setShowAudioModal] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<'citizens' | 'tasks' | 'archive'>('citizens');
@@ -128,13 +132,7 @@ export const Miniverse: React.FC = () => {
   const [analyzingImage, setAnalyzingImage] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [aiMode, setAiMode] = useState<'fast' | 'thinking' | 'maps'>('fast');
-  const [ttsEnabled, setTtsEnabled] = useState(false);
-  const [showImageGenModal, setShowImageGenModal] = useState(false);
-  const [imagePrompt, setImagePrompt] = useState('');
-  const [selectedAspectRatio, setSelectedAspectRatio] = useState<AspectRatio>('1:1');
-  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [aiMode, setAiMode] = useState<'fast' | 'thinking'>('fast');
   const [showChatbot, setShowChatbot] = useState(false);
   const [chatbotMessages, setChatbotMessages] = useState<{ role: 'user' | 'ai', text: string }[]>([]);
   const [chatbotInput, setChatbotInput] = useState('');
@@ -341,36 +339,11 @@ export const Miniverse: React.FC = () => {
     setAnalyzingImage(true);
     setAnalysisResult(null);
     try {
-      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY! });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
-          {
-            inlineData: {
-              mimeType: "image/jpeg",
-              data: base64Image.split(',')[1],
-            },
-          },
-          {
-            text: "Analyze this image in detail. What do you see? Provide a professional summary suitable for a virtual office environment.",
-          },
-        ],
-      });
-
-      setAnalysisResult(response.text || "No analysis could be generated.");
+      const { text } = await engine.analyzeImage(base64Image);
+      setAnalysisResult(text || "No analysis could be generated.");
     } catch (error) {
       console.error("Image Analysis Error:", error);
-      let errorMessage = "Error analyzing image. Please try again.";
-      
-      if (error instanceof Error) {
-        if (error.message.includes('429') || error.message.includes('RESOURCE_EXHAUSTED')) {
-          errorMessage = "AI Quota exceeded. Please wait a moment and try again, or check your API plan details.";
-        } else {
-          errorMessage = `Error: ${error.message}`;
-        }
-      }
-      
-      setAnalysisResult(errorMessage);
+      setAnalysisResult(`Error: ${error instanceof Error ? error.message : 'No se pudo analizar la imagen.'}`);
     } finally {
       setAnalyzingImage(false);
     }
@@ -386,69 +359,6 @@ export const Miniverse: React.FC = () => {
         analyzeImage(base64);
       };
       reader.readAsDataURL(file);
-    }
-  };
-
-  const generateAIResult = async (task: Task, worker: Citizen | Worker) => {
-    if (currentOffice?.status === 'closed') return "Office is closed. Task processing paused.";
-    try {
-      const knowledgeContext = knowledge.length > 0 
-        ? `\n\nRELEVANT KNOWLEDGE BASE:\n${knowledge.map(k => `--- ${k.title} ---\n${k.content}`).join('\n\n')}`
-        : '';
-
-      const model = worker.model || "gemini-2.0-flash";
-      const systemInstruction = `You are an AI agent named ${worker.name} working in a digital Virtual Office. 
-        You have just completed a task titled: "${task.title}".
-        ${task.description ? `Task description: ${task.description}` : ''}
-        
-        ${knowledgeContext}
-
-        Please generate a professional and detailed output for this task. 
-        If it's a report, write the report. If it's code, write the code. If it's a creative task, provide the creative output.
-        Format it nicely with headers and sections if appropriate. 
-        Make it feel like it was truly produced by an intelligent agent.
-        Use Google Search if you need up-to-date information to complete the task accurately.`;
-
-      const result = await aiService.generateWorkerResponse(model, "Complete the task shared in system instructions.", systemInstruction);
-
-      return result || "No content could be generated.";
-    } catch (error) {
-      console.error("AI Generation Error:", error);
-      return `Error generating content: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    }
-  };
-
-  const generateWorld = async (promptText?: string) => {
-    const finalPrompt = promptText || worldPrompt;
-    if (!finalPrompt) return;
-    
-    setIsGeneratingWorld(true);
-    try {
-      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY! });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Generate a creative theme and description for a digital agent virtual office based on this prompt: "${finalPrompt}". 
-        Return a JSON object with:
-        - themeName: a short catchy name
-        - description: a 2-sentence description
-        - primaryColor: a tailwind color class (e.g., 'indigo', 'emerald', 'rose', 'amber', 'violet')
-        - accentColor: another tailwind color class`,
-        config: { 
-          responseMimeType: "application/json",
-          tools: [{ googleSearch: {} }]
-        }
-      });
-      
-      const data = JSON.parse(response.text || '{}');
-      if (data.themeName) {
-        setWorldTheme(data.themeName);
-      }
-      setWorldPrompt('');
-      setShowWorldGen(false);
-    } catch (error) {
-      console.error("World Generation Error:", error);
-    } finally {
-      setIsGeneratingWorld(false);
     }
   };
 
@@ -538,89 +448,13 @@ export const Miniverse: React.FC = () => {
         }
       }
 
-      let responders: Citizen[] = [];
-      if (mentionedAgent) {
-        responders = [mentionedAgent];
-      } else {
-        // Randomly pick 1-2 responders if no specific mention
-        const numResponders = Math.min(citizens.length, Math.floor(Math.random() * 2) + 1);
-        const shuffled = [...citizens].sort(() => 0.5 - Math.random());
-        responders = shuffled.slice(0, numResponders);
-      }
-
-      for (const agent of responders) {
-        console.log(`[Chat] Scheduling response for agent: ${agent.name}`);
-        // Artificial delay for realism
-        setTimeout(async () => {
-          try {
-            console.log(`[Chat] Agent ${agent.name} is starting to generate response...`);
-            let responseText = "";
-            let groundingUrls: string[] = [];
-            
-            const instructionPrefix = mentionedAgent?.id === agent.id 
-              ? "You were specifically mentioned in this message." 
-              : "This is a general message to the team.";
-            
-            const systemInstruction = `You are ${agent.name}, a ${agent.role} in a Virtual Office. 
-              ${instructionPrefix}
-              The Admin just sent: "${message}".
-              Respond briefly (max 30 words), stay in character. If you were assigned a task, acknowledge it.`;
-
-            // Ensure we have a valid model string
-            const agentModel = agent.model && agent.model.trim() ? agent.model : "gemini-2.0-flash";
-
-            if (aiMode === 'thinking') {
-              responseText = await aiService.generateThinkingResponse(message, systemInstruction) || "";
-            } else if (aiMode === 'maps') {
-              const res = await aiService.generateMapsResponse(message);
-              responseText = res.text || "";
-              groundingUrls = res.groundingUrls;
-            } else {
-              responseText = await aiService.generateWorkerResponse(agentModel, message, systemInstruction) || "";
-            }
-
-            console.log(`[Chat] Agent ${agent.name} response: "${responseText}"`);
-
-            if (responseText) {
-              let audioUrl: string | undefined;
-              if (ttsEnabled) {
-                try {
-                  audioUrl = await aiService.generateSpeech(responseText);
-                } catch (e) {
-                  console.error("TTS Error:", e);
-                }
-              }
-
-              const newMessage = {
-                officeId: currentOffice.id,
-                senderId: agent.id,
-                senderName: agent.name,
-                message: responseText.trim(),
-                timestamp: Date.now(),
-                type: 'public' as const,
-                ownerId: currentUser.uid,
-                isAi: true,
-                isThinking: aiMode === 'thinking',
-                groundingUrls,
-                ...(audioUrl ? { audioUrl } : {})
-              };
-
-              await addDoc(collection(db, 'messages'), newMessage);
-              console.log(`[Chat] Message from ${agent.name} saved to Firestore.`);
-              
-              if (audioUrl) {
-                const audio = new Audio(audioUrl);
-                audio.play().catch(e => console.error("Audio playback failed:", e));
-              }
-            } else {
-              console.warn(`[Chat] Agent ${agent.name} generated an empty response.`);
-            }
-          } catch (error: any) {
-            console.error(`[Chat] Agent ${agent.name} Error:`, error);
-            setGroupChannelError(`Agent ${agent.name} failed to respond: ${error.message || 'AI Error'}`);
-          }
-        }, Math.random() * 2000 + 1000);
-      }
+      // One reply: the mentioned worker, or the engine picks the office's first worker.
+      // The engine writes the reply to Firestore; the messages listener shows it.
+      engine.chatRespond(currentOffice.id, message.trim(), mentionedAgent?.id, aiMode === 'thinking')
+        .catch((error: Error) => {
+          console.error('[Chat] Engine error:', error);
+          setGroupChannelError(error.message || 'El worker no pudo responder.');
+        });
     }
     
     // We keep this here to allow the user to send the next message immediately
@@ -762,12 +596,11 @@ export const Miniverse: React.FC = () => {
         for (let i = 0; i < next.length; i++) {
           const c = next[i];
 
-          // Autonomous Task Detection
-          // If citizen is idle and not assigned work, check for tasks assigned to them in Firestore
+          // Task visualisation. The engine claims and runs tasks; the simulation only
+          // mirrors Firestore state and never writes task status itself.
           if (c.currentAction === 'idle' && !c.isAssignedWork) {
-            const taskToStart = (tasksRef.current || []).find(t => 
-              (t.assignedTo === c.id || (!t.assignedTo && t.status === 'pending')) && 
-              (t.status === 'todo' || t.status === 'pending' || t.status === 'in-progress')
+            const taskToStart = (tasksRef.current || []).find(t =>
+              t.assignedTo === c.id && (t.status === 'todo' || t.status === 'in-progress') && !t.failed
             );
 
             if (taskToStart) {
@@ -783,20 +616,7 @@ export const Miniverse: React.FC = () => {
               // Move to the specific department for this task
               c.targetX = targetDept.x + Math.random() * targetDept.width;
               c.targetY = targetDept.y + Math.random() * targetDept.height;
-              
-              // If it was 'pending' or 'todo', claim it and mark as 'in-progress'
-              if (taskToStart.status === 'pending' || taskToStart.status === 'todo') {
-                updateDoc(doc(db, 'tasks', taskToStart.id), { 
-                  status: 'in-progress',
-                  assignedTo: c.id
-                }).catch(console.error);
-                
-                // Start AI generation
-                generateAIResult(taskToStart, c).then(async (result) => {
-                  await updateDoc(doc(db, 'tasks', taskToStart.id), { result });
-                }).catch(console.error);
-              }
-              
+
               // Set a short timer to switch from thinking to walking
               c.idleActionTimer = 15; 
               continue;
@@ -838,8 +658,17 @@ export const Miniverse: React.FC = () => {
 
           // Work Assignment Logic (Functional Furniture)
           if (c.isAssignedWork) {
-            if (!c.hasProduct) {
-              const taskToStart = (tasksRef.current || []).find(t => t.id === c.currentTaskId);
+            const currentTask = (tasksRef.current || []).find(t => t.id === c.currentTaskId);
+            const taskGone = !currentTask || currentTask.failed || currentTask.assignedTo !== c.id ||
+              !['todo', 'in-progress', 'done'].includes(currentTask.status);
+            if (taskGone && !c.hasProduct) {
+              // Deleted, failed or reassigned while we were animating: go back to idle.
+              c.isAssignedWork = false;
+              c.currentTaskId = undefined;
+              c.workProgress = 0;
+              c.currentAction = 'idle';
+            } else if (!c.hasProduct) {
+              const taskToStart = currentTask;
               const deptId = taskToStart ? getTaskDepartment(taskToStart.title, taskToStart.description) : 'logic';
               const targetDept = getDepartmentArea(deptId);
               
@@ -862,7 +691,9 @@ export const Miniverse: React.FC = () => {
                 }
               } else {
                 c.currentAction = 'working';
-                c.workProgress = (c.workProgress || 0) + 1.5; // Slightly faster logic
+                // Progress is cosmetic: it waits at 95% until the engine marks the task done.
+                const engineDone = currentTask?.status === 'done';
+                c.workProgress = Math.min(engineDone ? 100 : 95, (c.workProgress || 0) + 1.5);
                 if (c.workProgress >= 100) {
                   c.hasProduct = true;
                   c.workProgress = 0;
@@ -879,9 +710,6 @@ export const Miniverse: React.FC = () => {
                 c.targetY = targetPos.y;
                 c.currentAction = 'walking';
               } else {
-                if (c.currentTaskId) {
-                  completeTask(c.id, c.currentTaskId);
-                }
                 c.hasProduct = false;
                 c.isAssignedWork = false; 
                 c.currentTaskId = undefined;
@@ -962,20 +790,6 @@ export const Miniverse: React.FC = () => {
                 c.currentAction = 'walking';
               } else if (Math.random() < 0.05) {
                 c.currentAction = Math.random() > 0.5 ? 'thinking' : 'working';
-                
-                // Occasional group message (very low frequency to save Firestore quota)
-                if (Math.random() < 0.005) {
-                  const messages = [
-                    "Checking the latest logs...",
-                    "Anyone seen the documentation for the new API?",
-                    "Coffee break time!",
-                    "Thinking about the next sprint...",
-                    "Just finished a quick review.",
-                    "The virtual office looks great today!",
-                    "Working on some optimizations."
-                  ];
-                  sendAgentMessage(c, messages[Math.floor(Math.random() * messages.length)]);
-                }
               } else if (Math.random() < 0.05) {
                 const idleActions: ('looking_around' | 'stretching' | 'interacting')[] = ['looking_around', 'stretching', 'interacting'];
                 const selectedAction = idleActions[Math.floor(Math.random() * idleActions.length)];
@@ -1036,75 +850,29 @@ export const Miniverse: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // Assigning only records intent in Firestore; vo101-engine claims and runs the task.
   const assignWork = async (citizenId: string, taskId: string) => {
     if (currentOffice?.status === 'closed') {
       alert("Office is closed. Tasks cannot be assigned.");
       return;
     }
-    const citizen = citizens.find(c => c.id === citizenId);
-    const task = tasks.find(t => t.id === taskId);
-
-    setCitizens((prev: Citizen[]) => prev.map(c => {
-      if (c.id === citizenId) {
-        return { ...c, isAssignedWork: true, workProgress: 0, hasProduct: false, currentTaskId: taskId };
-      }
-      return c;
-    }));
-
-    // Update task status in Firestore to in-progress
     try {
-      await updateDoc(doc(db, 'tasks', taskId), {
-        status: 'in-progress',
-        assignedTo: citizenId
-      });
-
-      // START AI GENERATION AUTONOMOUSLY
-      if (task && citizen) {
-        generateAIResult(task, citizen).then(async (result) => {
-          await updateDoc(doc(db, 'tasks', taskId), {
-            result: result
-          });
-        });
-      }
+      await updateDoc(doc(db, 'tasks', taskId), { ...REQUEUE_FIELDS, assignedTo: citizenId });
     } catch (error: any) {
-      console.error("Error updating task status:", error);
+      console.error("Error assigning task:", error);
     }
   };
 
-  const completeTask = async (citizenId: string, taskId: string) => {
-    const citizen = citizens.find(c => c.id === citizenId);
-    const task = tasks.find(t => t.id === taskId);
-    try {
-      if (citizen && task) {
-        sendAgentMessage(citizen, `I've finished the task: "${task.title}". The output is ready in the storage area.`);
-      }
-      // Mark as done. The result is already being generated or is ready from assignWork
-      await updateDoc(doc(db, 'tasks', taskId), {
-        status: 'done'
-      });
-    } catch (error: any) {
-      console.error("Error completing task:", error);
-    }
-  };
-
-  const processTaskWithAI = async (task: Task) => {
-    setIsGenerating(true);
-    const citizen = citizens.find(c => c.id === task.assignedTo);
-    if (!citizen) {
-      setIsGenerating(false);
-      return;
-    }
-    const result = await generateAIResult(task, citizen);
-    
+  // Re-run a task: back to the engine's queue with a clean retry budget.
+  const requeueTask = async (task: Task) => {
     try {
       await updateDoc(doc(db, 'tasks', task.id), {
-        result: result
+        ...REQUEUE_FIELDS,
+        ...(task.assignedTo ? {} : { autoAssign: true }),
       });
-      setViewingTaskResult((prev: Task | null) => prev ? { ...prev, result } : null);
+      setViewingTaskResult(null);
     } catch (error: any) {
-      console.error("Error updating task with AI result:", error);
-    } finally {
-      setIsGenerating(false);
+      console.error("Error re-queueing task:", error);
     }
   };
 
@@ -1112,8 +880,9 @@ export const Miniverse: React.FC = () => {
     try {
       await addDoc(collection(db, 'tasks'), {
         ...taskData,
-        status: 'pending',
-        timestamp: new Date()
+        status: 'todo',
+        autoAssign: !taskData.assignedTo,
+        createdAt: new Date().toISOString(),
       });
     } catch (error: any) {
       console.error("Error creating task:", error);
@@ -1138,34 +907,19 @@ export const Miniverse: React.FC = () => {
   const handleRefineTask = async () => {
     if (!newTaskTitle.trim() || isRefiningTask || !currentOffice || !currentUser) return;
     setIsRefiningTask(true);
+    let title = newTaskTitle.trim();
+    let description = '';
     try {
-      const refined = await aiService.refineTaskWithAI(newTaskTitle);
-      
-      const taskData = {
-        title: refined.refinedTitle || newTaskTitle,
-        description: refined.refinedDescription || '',
-        status: 'pending' as const,
-        officeId: currentOffice.id,
-        ownerId: currentUser.uid,
-        createdAt: new Date().toISOString()
-      };
-
-      await addDoc(collection(db, 'tasks'), taskData);
-      setNewTaskTitle('');
-      setSidebarTab('tasks');
+      const refined = await engine.refineTask(title);
+      title = refined.title || title;
+      description = refined.description || '';
     } catch (e) {
-      console.error("Refinement error:", e);
-      // Fallback: create simple task
-      handleCreateTask({
-        title: newTaskTitle,
-        officeId: currentOffice.id,
-        ownerId: currentUser.uid
-      });
-      setNewTaskTitle('');
-      setSidebarTab('tasks');
-    } finally {
-      setIsRefiningTask(false);
+      console.error("Refinement error (creating task as typed):", e);
     }
+    await handleCreateTask({ title, description, officeId: currentOffice.id, ownerId: currentUser.uid });
+    setNewTaskTitle('');
+    setSidebarTab('tasks');
+    setIsRefiningTask(false);
   };
 
   const restoreTaskToSimulation = async (taskId: string) => {
@@ -1214,30 +968,17 @@ export const Miniverse: React.FC = () => {
     setIsChatbotLoading(true);
 
     try {
-      const response = await aiService.generateThinkingResponse(userMsg, "You are a helpful AI Assistant in a Virtual Office. Provide detailed and thoughtful answers.");
-      if (response) {
-        setChatbotMessages(prev => [...prev, { role: 'ai', text: response }]);
+      const history = [...chatbotMessages, { role: 'user' as const, text: userMsg }].slice(-20);
+      const { text } = await engine.askAssistant(history, true);
+      if (text) {
+        setChatbotMessages(prev => [...prev, { role: 'ai', text }]);
       }
     } catch (error) {
       console.error("Chatbot Error:", error);
-      setChatbotMessages(prev => [...prev, { role: 'ai', text: "Sorry, I encountered an error. Please try again." }]);
+      const detail = error instanceof Error ? error.message : 'Intenta de nuevo.';
+      setChatbotMessages(prev => [...prev, { role: 'ai', text: `No pude responder: ${detail}` }]);
     } finally {
       setIsChatbotLoading(false);
-    }
-  };
-
-  const handleGenerateImage = async () => {
-    if (!imagePrompt.trim()) return;
-    setIsGeneratingImage(true);
-    setGeneratedImageUrl(null);
-    try {
-      const url = await aiService.generateImage(imagePrompt, selectedAspectRatio);
-      setGeneratedImageUrl(url);
-    } catch (error) {
-      console.error("Image Gen Error:", error);
-      alert("Failed to generate image. Please try again.");
-    } finally {
-      setIsGeneratingImage(false);
     }
   };
 
@@ -1261,19 +1002,15 @@ export const Miniverse: React.FC = () => {
         reader.onerror = error => reject(error);
       });
       
-      const response = await aiService.generateAudioAnalysis(base64Data, audioFile.type || 'audio/mp3');
-      if (response) {
-        setAudioSummary(response);
+      const { text } = await engine.analyzeAudio(base64Data, audioFile.type || 'audio/mpeg');
+      if (text) {
+        setAudioSummary(text);
       } else {
         setAudioError('No summary generated.');
       }
     } catch (err: any) {
       console.error('Error analyzing audio:', err);
-      if (err.message?.includes('429') || err.message?.includes('RESOURCE_EXHAUSTED')) {
-        setAudioError('Quota exceeded for the AI model. Please wait a moment and try again.');
-      } else {
-        setAudioError('Failed to analyze the audio. Please ensure it is a valid audio file and try again.');
-      }
+      setAudioError(err?.message || 'No se pudo analizar el audio.');
     } finally {
       setIsAnalyzingAudio(false);
     }
@@ -1297,13 +1034,6 @@ export const Miniverse: React.FC = () => {
             </h1>
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full uppercase tracking-widest">{worldTheme}</span>
-              <button 
-                onClick={() => setShowWorldGen(true)}
-                className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors text-slate-400 hover:text-indigo-600"
-                title="Generate New Workspace"
-              >
-                <Sparkles className="w-4 h-4" />
-              </button>
             </div>
           </div>
           <div className="flex items-center gap-4 text-slate-500 text-sm">
@@ -1909,7 +1639,7 @@ export const Miniverse: React.FC = () => {
                            <button 
                              onClick={async () => {
                                try {
-                                 await updateDoc(doc(db, 'tasks', t.id), { status: 'pending', collected: false });
+                                 await updateDoc(doc(db, 'tasks', t.id), { status: 'done', collected: false });
                                } catch (err) {
                                  console.error("Restore Task Error:", err);
                                }
@@ -1955,20 +1685,6 @@ export const Miniverse: React.FC = () => {
                 <h2 className="text-xs font-bold uppercase tracking-widest">Group Channel</h2>
               </div>
               <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => setTtsEnabled(!ttsEnabled)}
-                  className={`p-1 rounded transition-colors ${ttsEnabled ? 'text-emerald-400 bg-emerald-400/10' : 'text-slate-500 hover:text-slate-400'}`}
-                  title="Toggle TTS"
-                >
-                  {ttsEnabled ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />}
-                </button>
-                <button 
-                  onClick={() => setShowImageGenModal(true)}
-                  className="p-1 text-slate-500 hover:text-indigo-400 transition-colors"
-                  title="Generate Image"
-                >
-                  <ImageIcon className="w-3 h-3" />
-                </button>
               </div>
             </div>
 
@@ -1976,8 +1692,7 @@ export const Miniverse: React.FC = () => {
             <div className="flex gap-1 mb-3 bg-slate-800 p-1 rounded-lg">
               {[
                 { id: 'fast', icon: <Zap className="w-3 h-3" />, label: 'Fast' },
-                { id: 'thinking', icon: <Brain className="w-3 h-3" />, label: 'Think' },
-                { id: 'maps', icon: <MapPin className="w-3 h-3" />, label: 'Maps' }
+                { id: 'thinking', icon: <Brain className="w-3 h-3" />, label: 'Think' }
               ].map(mode => (
                 <button
                   key={mode.id}
@@ -2033,7 +1748,7 @@ export const Miniverse: React.FC = () => {
                 type="text" 
                 value={groupChannelInput}
                 onChange={(e) => setGroupChannelInput(e.target.value)}
-                placeholder={currentOffice?.status === 'closed' ? 'Office is closed' : aiMode === 'maps' ? "Ask about locations..." : aiMode === 'thinking' ? "Ask complex questions..." : "Broadcast message..."}
+                placeholder={currentOffice?.status === 'closed' ? 'Office is closed' : aiMode === 'thinking' ? "Ask complex questions..." : "Broadcast message..."}
                 disabled={isSendingGroupMessage || currentOffice?.status === 'closed'}
                 className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-[10px] text-white outline-none focus:border-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 onKeyDown={(e) => {
@@ -2266,19 +1981,25 @@ export const Miniverse: React.FC = () => {
 
               <div className="p-8">
                 <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 font-mono text-sm text-slate-700 whitespace-pre-wrap min-h-[200px] max-h-[400px] overflow-y-auto relative">
-                  {isGenerating ? (
+                  {viewingTaskResult && !viewingTaskResult.result && (viewingTaskResult.status === 'todo' || viewingTaskResult.status === 'in-progress') && !viewingTaskResult.failed ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm">
                       <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-2" />
-                      <p className="text-xs font-bold text-slate-500 animate-pulse">Agent is processing data...</p>
+                      <p className="text-xs font-bold text-slate-500 animate-pulse">
+                        {viewingTaskResult.status === 'in-progress' ? 'El motor está ejecutando la tarea…' : 'En cola del motor…'}
+                      </p>
                     </div>
                   ) : viewingTaskResult?.result ? (
                     viewingTaskResult.result
                   ) : (
                     <div className="flex flex-col items-center justify-center h-full py-12 text-center">
                       <Brain className="w-12 h-12 text-slate-200 mb-4" />
-                      <p className="text-slate-400 mb-6">No content generated for this task yet.</p>
+                      <p className="text-slate-400 mb-6">
+                        {viewingTaskResult?.failed
+                          ? `La tarea falló varias veces: ${viewingTaskResult.lastError || 'error del motor'}`
+                          : 'No content generated for this task yet.'}
+                      </p>
                       <button
-                        onClick={() => viewingTaskResult && processTaskWithAI(viewingTaskResult)}
+                        onClick={() => viewingTaskResult && requeueTask(viewingTaskResult)}
                         className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20"
                       >
                         <Zap className="w-4 h-4" />
@@ -2295,14 +2016,14 @@ export const Miniverse: React.FC = () => {
                         copyToClipboard(viewingTaskResult.result);
                       }
                     }}
-                    disabled={!viewingTaskResult?.result || isGenerating}
+                    disabled={!viewingTaskResult?.result}
                     className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-200 transition-all disabled:opacity-50"
                   >
                     <ClipboardCheck className="w-4 h-4" />
                     Copy Content
                   </button>
                   <button
-                    disabled={!viewingTaskResult?.result || isGenerating}
+                    disabled={!viewingTaskResult?.result}
                     className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50"
                   >
                     <Download className="w-4 h-4" />
@@ -2316,91 +2037,6 @@ export const Miniverse: React.FC = () => {
                   <Brain className="w-3 h-3" />
                   Processed by Miniverse Agent Intelligence
                 </p>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* World Generator Modal */}
-      <AnimatePresence>
-        {showWorldGen && (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowWorldGen(false)}
-              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative w-full max-w-2xl bg-slate-900 text-white rounded-[3rem] shadow-2xl overflow-hidden border border-slate-800"
-            >
-              <div className="p-12">
-                <div className="flex justify-between items-start mb-8">
-                  <div>
-                    <h2 className="text-4xl font-bold tracking-tight mb-2 flex items-center gap-3">
-                      <Sparkles className="w-8 h-8 text-indigo-400" />
-                      World Generator
-                    </h2>
-                    <p className="text-slate-400">Describe it. Get a complete, playable miniverse.</p>
-                  </div>
-                  <button onClick={() => setShowWorldGen(false)} className="p-2 hover:bg-slate-800 rounded-full transition-colors">
-                    <X className="w-6 h-6 text-slate-500" />
-                  </button>
-                </div>
-
-                <div className="space-y-8">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">From a description</label>
-                    <div className="relative">
-                      <textarea 
-                        value={worldPrompt}
-                        onChange={(e) => setWorldPrompt(e.target.value)}
-                        placeholder="e.g. 'cozy startup office with lots of plants and a coffee bar'"
-                        className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-6 text-sm text-white outline-none focus:border-indigo-500 min-h-[120px] resize-none"
-                      />
-                      <button 
-                        onClick={() => generateWorld()}
-                        disabled={isGeneratingWorld || !worldPrompt}
-                        className="absolute bottom-4 right-4 px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-indigo-500 transition-all disabled:opacity-50"
-                      >
-                        {isGeneratingWorld ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                        Generate Workspace
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <div className="bg-slate-800/50 p-6 rounded-3xl border border-slate-700/50">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center">
-                          <ImageIcon className="w-5 h-5 text-indigo-400" />
-                        </div>
-                        <h3 className="font-bold">From Image</h3>
-                      </div>
-                      <p className="text-xs text-slate-500 mb-4 leading-relaxed">Upload a reference photo to generate a workspace with similar aesthetics and layout.</p>
-                      <button className="w-full py-3 border border-slate-700 rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors">
-                        Upload Image
-                      </button>
-                    </div>
-                    <div className="bg-slate-800/50 p-6 rounded-3xl border border-slate-700/50">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="w-10 h-10 bg-emerald-500/10 rounded-xl flex items-center justify-center">
-                          <Users className="w-5 h-5 text-emerald-400" />
-                        </div>
-                        <h3 className="font-bold">Shared Workspaces</h3>
-                      </div>
-                      <p className="text-xs text-slate-500 mb-4 leading-relaxed">Join a shared workspace and meet other agents from around the globe.</p>
-                      <button className="w-full py-3 border border-slate-700 rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors">
-                        Explore Workspaces
-                      </button>
-                    </div>
-                  </div>
-                </div>
               </div>
             </motion.div>
           </div>
@@ -2657,111 +2293,6 @@ export const Miniverse: React.FC = () => {
                     <button className="px-6 py-3 bg-white text-indigo-600 rounded-xl font-bold text-sm hover:bg-indigo-50 transition-colors">
                       View Docs
                     </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-      {/* Image Generation Modal */}
-      <AnimatePresence>
-        {showImageGenModal && (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowImageGenModal(false)}
-              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative w-full max-w-2xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden"
-            >
-              <div className="p-8">
-                <div className="flex justify-between items-center mb-6">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
-                      <ImageIcon className="w-5 h-5 text-indigo-600" />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-slate-900">Creative Studio</h2>
-                      <p className="text-xs text-slate-500">Generate high-quality office assets with AI</p>
-                    </div>
-                  </div>
-                  <button onClick={() => setShowImageGenModal(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
-                    <X className="w-5 h-5 text-slate-400" />
-                  </button>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-8">
-                  <div className="space-y-6">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Prompt</label>
-                      <textarea 
-                        value={imagePrompt}
-                        onChange={(e) => setImagePrompt(e.target.value)}
-                        placeholder="Describe the image you want to generate..."
-                        className="w-full h-32 bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Aspect Ratio</label>
-                      <div className="grid grid-cols-4 gap-2">
-                        {(["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"] as AspectRatio[]).map(ratio => (
-                          <button
-                            key={ratio}
-                            onClick={() => setSelectedAspectRatio(ratio)}
-                            className={`py-2 rounded-xl text-[10px] font-bold transition-all border ${
-                              selectedAspectRatio === ratio 
-                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg' 
-                                : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
-                            }`}
-                          >
-                            {ratio}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <button 
-                      onClick={handleGenerateImage}
-                      disabled={isGeneratingImage || !imagePrompt.trim()}
-                      className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold text-sm hover:bg-slate-800 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-xl"
-                    >
-                      {isGeneratingImage ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                      {isGeneratingImage ? 'Generating...' : 'Generate Image'}
-                    </button>
-                  </div>
-
-                  <div className="aspect-square bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden relative">
-                    {isGeneratingImage ? (
-                      <div className="flex flex-col items-center gap-3">
-                        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
-                        <p className="text-xs text-slate-400 animate-pulse font-medium">Creating your masterpiece...</p>
-                      </div>
-                    ) : generatedImageUrl ? (
-                      <img src={generatedImageUrl} alt="Generated" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="text-center p-8">
-                        <ImageIcon className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-                        <p className="text-xs text-slate-400 font-medium">Your generated image will appear here</p>
-                      </div>
-                    )}
-                    
-                    {generatedImageUrl && (
-                      <a 
-                        href={generatedImageUrl} 
-                        download="generated-office-asset.png"
-                        className="absolute bottom-4 right-4 p-3 bg-white/90 backdrop-blur-sm rounded-xl shadow-lg hover:bg-white transition-colors text-slate-900"
-                      >
-                        <Download className="w-4 h-4" />
-                      </a>
-                    )}
                   </div>
                 </div>
               </div>
