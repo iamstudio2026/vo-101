@@ -22,6 +22,8 @@ export interface Office {
   skillSettings?: Record<string, any>;
   population?: { filename: string; uploadedAt: string; years: number[]; municipios: number; total: Record<string, number> };
   docTemplate?: { filename: string; uploadedAt: string };
+  bulletinSchedule?: { enabled: boolean; entidad: string; region: string; lastRunKey?: string; lastTaskId?: string };
+  telegramChats?: { id: string; title: string; type?: string }[];
 }
 
 export interface Worker {
@@ -76,6 +78,7 @@ export interface Task {
   artifacts?: { title: string; dataUrl: string }[];
   unverifiedNumbers?: string[];
   docBody?: string;
+  telegramStatus?: 'pendiente' | 'en_revision' | 'enviado' | 'sin_chats' | 'error';
 }
 
 export enum OperationType {

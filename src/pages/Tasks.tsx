@@ -4,7 +4,7 @@ import { useOffice } from '../context/OfficeContext';
 import { db, handleFirestoreError } from '../firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, deleteField } from 'firebase/firestore';
 import { Task, Worker, OperationType } from '../types';
-import { CheckSquare, Plus, Trash2, Clock, CheckCircle2, Circle, Sparkles, Loader2, Wand2, ShieldCheck, Hourglass, ThumbsUp, RotateCcw, FileSpreadsheet, BookOpenCheck, Activity, FileSignature, FileDown } from 'lucide-react';
+import { CheckSquare, Plus, Trash2, Clock, CheckCircle2, Circle, Sparkles, Loader2, Wand2, ShieldCheck, Hourglass, ThumbsUp, RotateCcw, FileSpreadsheet, BookOpenCheck, Activity, FileSignature, FileDown, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as engine from '../services/engine';
 import { approveTask, requestChanges } from '../services/taskActions';
@@ -293,7 +293,10 @@ export const Tasks: React.FC = () => {
         ))}
       </div>
 
-      {openSkill === 'boletin' && <BulletinSkill office={currentOffice} onClose={() => setOpenSkill(null)} />}
+      {openSkill === 'boletin' && (
+        <BulletinSkill office={currentOffice} isOwner={currentOffice.ownerId === currentUser?.uid}
+                       onClose={() => setOpenSkill(null)} />
+      )}
       {openSkill === 'evidencia' && <EvidenceSkill office={currentOffice} onClose={() => setOpenSkill(null)} />}
       {openSkill === 'brote' && <OutbreakSkill office={currentOffice} onClose={() => setOpenSkill(null)} />}
       {openSkill === 'documento' && (
@@ -601,6 +604,18 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, workers, onStatusChange, onDe
             {task.approval === 'approved' && (
               <span className="text-xs font-medium px-2 py-1 rounded-md flex items-center gap-1 bg-emerald-100 text-emerald-800">
                 <ThumbsUp className="w-3 h-3" /> Aprobada por ti
+              </span>
+            )}
+
+            {task.telegramStatus && (
+              <span className={`text-xs font-medium px-2 py-1 rounded-md flex items-center gap-1 ${
+                task.telegramStatus === 'enviado' ? 'bg-sky-100 text-sky-800' :
+                task.telegramStatus === 'error' ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-600'}`}>
+                <Send className="w-3 h-3" />
+                {task.telegramStatus === 'enviado' ? 'Enviado por Telegram' :
+                 task.telegramStatus === 'en_revision' ? 'Telegram: al aprobarse' :
+                 task.telegramStatus === 'error' ? 'Telegram: falló el envío' :
+                 task.telegramStatus === 'sin_chats' ? 'Telegram: sin chats' : 'Telegram: pendiente'}
               </span>
             )}
 

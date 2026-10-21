@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { OperationType, Office } from '../types';
 import { OfficeMembers } from '../components/OfficeMembers';
 import { TemplateButton } from '../components/TemplateButton';
+import { TelegramPanel } from '../components/TelegramPanel';
 
 export const Offices: React.FC = () => {
   const { currentUser } = useAuth();
@@ -215,6 +216,7 @@ export const Offices: React.FC = () => {
                         </div>
                         {currentUser && office.ownerId === currentUser.uid && <TemplateButton office={office} />}
                         {currentUser && <OfficeMembers office={office} currentUid={currentUser.uid} />}
+                        {currentUser && <TelegramPanel office={office} currentUid={currentUser.uid} />}
                       </div>
                     </div>
                     <div className={`flex gap-2 ${office.ownerId === currentUser?.uid ? '' : 'hidden'}`}>
