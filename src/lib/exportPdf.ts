@@ -15,6 +15,7 @@ export interface PrintableDeliverable {
   model?: string;
   reviewVerdict?: string;
   approvedByUser?: boolean;
+  charts?: { title: string; dataUrl: string }[];
 }
 
 const escapeHtml = (s: string) =>
@@ -51,6 +52,9 @@ export function buildPrintableHtml(d: PrintableDeliverable): string {
   th { background: #f1f5f9; }
   code, pre { font-family: Consolas, monospace; font-size: 9pt; background: #f8fafc; }
   pre { padding: 8px; white-space: pre-wrap; }
+  figure { margin: 14px 0; page-break-inside: avoid; text-align: center; }
+  figure img { max-width: 100%; }
+  figcaption { font-size: 8.5pt; color: #64748b; }
   footer { margin-top: 24px; font-size: 7.5pt; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 6px; }
 </style></head>
 <body>
@@ -59,7 +63,8 @@ export function buildPrintableHtml(d: PrintableDeliverable): string {
     <h1 class="title">${escapeHtml(d.title)}</h1>
     <div class="meta">${meta}</div>
   </header>
-  <main>${content}</main>
+  <main>${content}${(d.charts || []).filter(c => /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(c.dataUrl)).map(c =>
+    `<figure><img src="${c.dataUrl}" alt="${escapeHtml(c.title)}"><figcaption>${escapeHtml(c.title)}</figcaption></figure>`).join('')}</main>
   <footer>${d.model ? `Generado con ${escapeHtml(d.model)} · ` : ''}Exportado ${escapeHtml(new Date().toLocaleString('es-MX'))}</footer>
   <script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 150); });</script>
 </body></html>`;

@@ -4,11 +4,12 @@ import { useOffice } from '../context/OfficeContext';
 import { db, handleFirestoreError } from '../firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, deleteField } from 'firebase/firestore';
 import { Task, Worker, OperationType } from '../types';
-import { CheckSquare, Plus, Trash2, Clock, CheckCircle2, Circle, Sparkles, Loader2, Wand2, ShieldCheck, Hourglass, ThumbsUp, RotateCcw } from 'lucide-react';
+import { CheckSquare, Plus, Trash2, Clock, CheckCircle2, Circle, Sparkles, Loader2, Wand2, ShieldCheck, Hourglass, ThumbsUp, RotateCcw, FileSpreadsheet } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as engine from '../services/engine';
 import { approveTask, requestChanges } from '../services/taskActions';
 import { SCENES } from '../lib/choreography';
+import { BulletinSkill } from '../components/BulletinSkill';
 
 export const Tasks: React.FC = () => {
   const { currentUser } = useAuth();
@@ -212,6 +213,7 @@ export const Tasks: React.FC = () => {
   };
 
   const [viewMode, setViewMode] = useState<'list' | 'flow'>('list');
+  const [showBulletin, setShowBulletin] = useState(false);
 
   if (!currentOffice) {
     return <div className="text-center text-slate-500 mt-10">Please select an office first.</div>;
@@ -262,8 +264,17 @@ export const Tasks: React.FC = () => {
             <Wand2 className="w-4 h-4" />
             Generate Flow
           </button>
+          <button
+            onClick={() => setShowBulletin(v => !v)}
+            className="flex items-center gap-2 bg-rose-600 text-white px-4 py-2 rounded-xl font-medium hover:bg-rose-700 transition-colors shadow-sm"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            Boletín epidemiológico
+          </button>
         </div>
       </header>
+
+      {showBulletin && <BulletinSkill office={currentOffice} onClose={() => setShowBulletin(false)} />}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-1">

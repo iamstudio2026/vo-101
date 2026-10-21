@@ -17,6 +17,8 @@ export interface Office {
   memberIds?: string[];
   memberProfiles?: Record<string, { email: string; name?: string }>;
   pendingEmails?: string[];
+  skills?: string[];
+  template?: string;
 }
 
 export interface Worker {
@@ -66,6 +68,10 @@ export interface Task {
   approval?: 'pending' | 'approved' | 'changes_requested';
   humanFeedback?: string;
   truncated?: boolean;
+  // Skills (habilidades)
+  skill?: string;
+  artifacts?: { title: string; dataUrl: string }[];
+  unverifiedNumbers?: string[];
 }
 
 export enum OperationType {

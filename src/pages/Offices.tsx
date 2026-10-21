@@ -7,6 +7,7 @@ import { Building2, Plus, Trash2, Edit2, X, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { OperationType, Office } from '../types';
 import { OfficeMembers } from '../components/OfficeMembers';
+import { TemplateButton } from '../components/TemplateButton';
 
 export const Offices: React.FC = () => {
   const { currentUser } = useAuth();
@@ -212,6 +213,7 @@ export const Offices: React.FC = () => {
                             {office.status === 'closed' ? 'Open Office' : 'Close Office'}
                           </button>
                         </div>
+                        {currentUser && office.ownerId === currentUser.uid && <TemplateButton office={office} />}
                         {currentUser && <OfficeMembers office={office} currentUid={currentUser.uid} />}
                       </div>
                     </div>

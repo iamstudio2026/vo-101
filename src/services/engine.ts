@@ -2,6 +2,7 @@
 // Client for vo101-engine. The browser holds no model credentials: every AI call goes
 // to the engine with the user's Firebase ID token, and task execution happens only there.
 import { auth } from '../firebase';
+import { gzipBase64 } from '../lib/gzip';
 
 const ENGINE_URL = (import.meta.env.VITE_ENGINE_URL || '/engine').replace(/\/$/, '');
 
@@ -15,7 +16,11 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return request<T>('POST', path, body);
 }
 
-async function request<T>(method: 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> {
+async function getJson<T>(path: string): Promise<T> {
+  return request<T>('GET', path);
+}
+
+async function request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> {
   const user = auth.currentUser;
   if (!user) throw new EngineError(401, 'Inicia sesión para usar la IA.');
   const token = await user.getIdToken();
@@ -80,3 +85,44 @@ export const cancelInvite = (officeId: string, email: string) =>
 
 /** After sign-in: join the offices that invited this (verified) email. */
 export const claimInvites = () => post<{ joined: string[] }>('/me/claim-invites', {});
+
+// --- Skills (habilidades) --------------------------------------------------------
+export interface SkillInfo { id: string; name: string; description: string; inputs: string[] }
+
+export const listSkills = () => getJson<{ skills: SkillInfo[] }>('/skills');
+
+/** Owner only: add the template's workers, context note and skills to the office. */
+export const applyTemplate = (officeId: string, templateId: string) =>
+  post<{ workers_created: string[]; note_added: boolean; skills: string[] }>(
+    `/offices/${encodeURIComponent(officeId)}/templates/${encodeURIComponent(templateId)}`, {});
+
+export interface BulletinInspection {
+  upload_id: string;
+  filename: string;
+  rows: number;
+  columns: string[];
+  detected: Record<string, string | null>;
+  role_labels: Record<string, string>;
+  status_values: { value: string; count: number }[];
+  suggested_status: Record<string, string>;
+  assumptions: string[];
+  date_range: [string, string] | null;
+  suggested_period?: { year: number; week: number };
+  entidad_values: { value: string; count: number }[];
+  saved_settings: { mapping?: Record<string, string | null>; statusMap?: Record<string, string>; region?: string; entidad?: string };
+}
+
+export const inspectBulletinFile = async (officeId: string, file: File) =>
+  post<BulletinInspection>('/skills/boletin_epidemiologico/inspect', {
+    office_id: officeId,
+    filename: file.name,
+    data_gz_b64: await gzipBase64(file),
+  });
+
+export const runBulletin = (body: {
+  office_id: string;
+  upload_id: string;
+  mapping: Record<string, string | null>;
+  status_map: Record<string, string>;
+  params: { year?: number; week?: number; region: string; entidad: string };
+}) => post<{ task_id: string; assigned_to: string | null }>('/skills/boletin_epidemiologico/run', body);

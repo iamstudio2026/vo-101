@@ -2032,7 +2032,15 @@ export const Miniverse: React.FC = () => {
                       </p>
                     </div>
                   ) : liveViewing?.result ? (
-                    <Markdown remarkPlugins={[remarkGfm]}>{liveViewing.result}</Markdown>
+                    <>
+                      <Markdown remarkPlugins={[remarkGfm]}>{liveViewing.result}</Markdown>
+                      {(liveViewing.artifacts || []).map((c, k) => (
+                        <figure key={k} className="my-3">
+                          <img src={c.dataUrl} alt={c.title} className="w-full rounded-lg border border-slate-200 bg-white" />
+                          <figcaption className="text-[10px] text-slate-500 text-center mt-1">{c.title}</figcaption>
+                        </figure>
+                      ))}
+                    </>
                   ) : (
                     <div className="flex flex-col items-center justify-center h-full py-12 text-center">
                       <Brain className="w-12 h-12 text-slate-200 mb-4" />
@@ -2123,10 +2131,11 @@ export const Miniverse: React.FC = () => {
                       body: liveViewing.result,
                       worker: citizens.find(c => c.id === liveViewing.assignedTo)?.name,
                       office: currentOffice?.name,
-                      date: (liveViewing.executedAt || liveViewing.createdAt || '').slice(0, 10),
+                      date: new Date(liveViewing.executedAt || liveViewing.createdAt || Date.now()).toLocaleDateString('es-MX'),
                       model: liveViewing.modelUsed,
                       reviewVerdict: liveViewing.review?.verdict,
                       approvedByUser: liveViewing.approval === 'approved',
+                      charts: liveViewing.artifacts,
                     })}
                     disabled={!liveViewing?.result}
                     className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50"
