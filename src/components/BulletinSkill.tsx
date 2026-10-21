@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileSpreadsheet, Upload, Loader2, AlertTriangle, CheckCircle2, Sparkles, X } from 'lucide-react';
+import { FileSpreadsheet, Upload, Loader2, AlertTriangle, CheckCircle2, Sparkles, X, Users } from 'lucide-react';
 import { Office } from '../types';
 import * as engine from '../services/engine';
 
@@ -7,6 +7,43 @@ const ROLE_ORDER = ['fecha_sintomas', 'estatus', 'municipio', 'jurisdiccion', 'e
 const REQUIRED = new Set(['fecha_sintomas', 'estatus']);
 const CLASS_LABEL: Record<string, string> = {
   confirmado: 'Confirmado', probable: 'Probable', descartado: 'Descartado', ignorar: 'No contar',
+};
+
+// Rates need a denominator: the office keeps one population table (e.g. CONAPO projections).
+const PopulationPanel: React.FC<{ office: Office }> = ({ office }) => {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const pop = office.population;
+
+  const onFile = async (file?: File) => {
+    if (!file) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await engine.uploadPopulation(office.id, file);
+      setMsg(`Población cargada: ${r.municipios} municipios${r.years.length ? `, años ${r.years.join(', ')}` : ''}.`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'No se pudo leer la tabla de población.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2">
+      <Users className="w-4 h-4 text-slate-400" />
+      {pop
+        ? <span>Tasas por 100 000 hab. con <strong className="text-slate-700">{pop.filename}</strong> ({pop.municipios} municipios{pop.years.length ? `, ${pop.years.join(', ')}` : ''}).</span>
+        : <span>Sin tabla de población: el boletín no incluirá tasas.</span>}
+      <label className="inline-flex items-center gap-1 text-indigo-700 cursor-pointer hover:underline">
+        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+        {pop ? 'Reemplazar' : 'Cargar población (CSV: municipio o clave, población, año opcional)'}
+        <input type="file" accept=".csv,text/csv" className="hidden" disabled={busy} onChange={(e) => onFile(e.target.files?.[0])} />
+      </label>
+      <span className="w-full text-[11px] text-slate-400">El canal endémico se agrega solo si el archivo de casos trae al menos 3 de los 5 años previos (lo ideal son 5).</span>
+      {msg && <span className="w-full text-slate-600">{msg}</span>}
+    </div>
+  );
 };
 
 // Skill «Boletín epidemiológico»: upload the case CSV, confirm how its columns and status
@@ -92,6 +129,8 @@ export const BulletinSkill: React.FC<{ office: Office; onClose: () => void }> = 
         <input type="file" accept=".csv,text/csv" className="hidden" disabled={busy}
                onChange={(e) => onFile(e.target.files?.[0])} />
       </label>
+
+      <PopulationPanel office={office} />
 
       {error && <p className="mt-3 text-sm text-rose-600 flex items-center gap-2"><AlertTriangle className="w-4 h-4" />{error}</p>}
       {done && <p className="mt-3 text-sm text-emerald-700 flex items-center gap-2"><CheckCircle2 className="w-4 h-4" />{done}</p>}
