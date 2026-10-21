@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { FileSpreadsheet, Upload, Loader2, AlertTriangle, CheckCircle2, Sparkles, X, Users } from 'lucide-react';
 import { Office } from '../types';
 import * as engine from '../services/engine';
+import { DgeBulletin } from './DgeBulletin';
 
 const ROLE_ORDER = ['fecha_sintomas', 'estatus', 'municipio', 'jurisdiccion', 'edad', 'sexo', 'entidad', 'gravedad'];
 const REQUIRED = new Set(['fecha_sintomas', 'estatus']);
@@ -49,7 +50,7 @@ const PopulationPanel: React.FC<{ office: Office }> = ({ office }) => {
 // Skill «Boletín epidemiológico»: upload the case CSV, confirm how its columns and status
 // codes should be read, pick the week. The numbers are computed by the engine; the
 // mapping is remembered for the office, so next week is: upload, check, generate.
-export const BulletinSkill: React.FC<{ office: Office; onClose: () => void }> = ({ office, onClose }) => {
+export const BulletinSkill: React.FC<{ office: Office; isOwner: boolean; onClose: () => void }> = ({ office, isOwner, onClose }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
@@ -95,6 +96,7 @@ export const BulletinSkill: React.FC<{ office: Office; onClose: () => void }> = 
         mapping,
         status_map: statusMap,
         params: { year: year || undefined, week: week || undefined, region, entidad },
+        telegram: (office.telegramChats ?? []).length > 0,
       });
       setDone('Boletín en preparación. El analista ya lo está procesando: lo verás en esta lista y en la oficina.');
       setInfo(null);
@@ -123,6 +125,9 @@ export const BulletinSkill: React.FC<{ office: Office; onClose: () => void }> = 
         <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
       </div>
 
+      <DgeBulletin office={office} isOwner={isOwner} />
+
+      <p className="mt-5 mb-2 text-sm font-semibold text-slate-800">O con tu propia base de casos (CSV)</p>
       <label className={`flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-5 cursor-pointer text-sm ${busy ? 'opacity-60' : 'hover:border-indigo-300 hover:bg-indigo-50/40'} border-slate-200 text-slate-600`}>
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
         {info ? `${info.filename} · ${info.rows.toLocaleString('es-MX')} registros · cambiar archivo` : 'Seleccionar CSV de casos'}

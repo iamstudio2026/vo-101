@@ -20,12 +20,12 @@ async function getJson<T>(path: string): Promise<T> {
   return request<T>('GET', path);
 }
 
-async function request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> {
+async function request<T>(method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<T> {
   const res = await send(method, path, body);
   return res.json() as Promise<T>;
 }
 
-async function send(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<Response> {
+async function send(method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<Response> {
   const user = auth.currentUser;
   if (!user) throw new EngineError(401, 'Inicia sesión para usar la IA.');
   const token = await user.getIdToken();
@@ -133,6 +133,7 @@ export const runBulletin = (body: {
   mapping: Record<string, string | null>;
   status_map: Record<string, string>;
   params: { year?: number; week?: number; region: string; entidad: string };
+  telegram?: boolean;
 }) => post<{ task_id: string; assigned_to: string | null }>('/skills/boletin_epidemiologico/run', body);
 
 export const runEvidenceReview = (officeId: string, question: string, years = 10, maxArticles = 12) =>
@@ -210,3 +211,20 @@ export async function downloadTaskDocx(taskId: string, title: string): Promise<v
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
+
+// --- Bulletin from the DGE open data, weekly schedule, Telegram ------------------------
+export const dgeStates = () => getJson<{ entidades: { clave: string; nombre: string }[] }>('/dge/entidades');
+
+export const runDgeBulletin = (body: { office_id: string; entidad: string; region: string; year?: number; week?: number; telegram: boolean }) =>
+  post<{ task_id: string }>('/skills/boletin_epidemiologico/dge', body);
+
+export const setBulletinSchedule = (officeId: string, body: { enabled: boolean; entidad: string; region: string }) =>
+  request<{ enabled: boolean }>('PUT', `${office(officeId)}/bulletin-schedule`, body);
+
+export const telegramStatus = () => getJson<{ enabled: boolean; bot: string | null }>('/telegram/status');
+
+export const telegramLink = (officeId: string) =>
+  post<{ code: string; bot: string; url: string; groupUrl: string; expiresAt: string }>(`${office(officeId)}/telegram/link`, {});
+
+export const telegramUnlink = (officeId: string, chatId: string) =>
+  del<{ ok: boolean }>(`${office(officeId)}/telegram/chats/${encodeURIComponent(chatId)}`);
