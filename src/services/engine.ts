@@ -126,3 +126,8 @@ export const runBulletin = (body: {
   status_map: Record<string, string>;
   params: { year?: number; week?: number; region: string; entidad: string };
 }) => post<{ task_id: string; assigned_to: string | null }>('/skills/boletin_epidemiologico/run', body);
+
+export const runEvidenceReview = (officeId: string, question: string, years = 10, maxArticles = 12) =>
+  post<{ task_id: string; assigned_to: string | null }>('/skills/revision_evidencia/run', {
+    office_id: officeId, question, years, max_articles: maxArticles,
+  });
