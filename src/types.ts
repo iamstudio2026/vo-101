@@ -19,6 +19,9 @@ export interface Office {
   pendingEmails?: string[];
   skills?: string[];
   template?: string;
+  skillSettings?: Record<string, any>;
+  population?: { filename: string; uploadedAt: string; years: number[]; municipios: number; total: Record<string, number> };
+  docTemplate?: { filename: string; uploadedAt: string };
 }
 
 export interface Worker {
@@ -72,6 +75,7 @@ export interface Task {
   skill?: string;
   artifacts?: { title: string; dataUrl: string }[];
   unverifiedNumbers?: string[];
+  docBody?: string;
 }
 
 export enum OperationType {

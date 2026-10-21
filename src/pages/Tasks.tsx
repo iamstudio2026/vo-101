@@ -4,13 +4,23 @@ import { useOffice } from '../context/OfficeContext';
 import { db, handleFirestoreError } from '../firebase';
 import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, deleteField } from 'firebase/firestore';
 import { Task, Worker, OperationType } from '../types';
-import { CheckSquare, Plus, Trash2, Clock, CheckCircle2, Circle, Sparkles, Loader2, Wand2, ShieldCheck, Hourglass, ThumbsUp, RotateCcw, FileSpreadsheet, BookOpenCheck } from 'lucide-react';
+import { CheckSquare, Plus, Trash2, Clock, CheckCircle2, Circle, Sparkles, Loader2, Wand2, ShieldCheck, Hourglass, ThumbsUp, RotateCcw, FileSpreadsheet, BookOpenCheck, Activity, FileSignature, FileDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as engine from '../services/engine';
 import { approveTask, requestChanges } from '../services/taskActions';
 import { SCENES } from '../lib/choreography';
 import { BulletinSkill } from '../components/BulletinSkill';
 import { EvidenceSkill } from '../components/EvidenceSkill';
+import { OutbreakSkill } from '../components/OutbreakSkill';
+import { DocumentSkill } from '../components/DocumentSkill';
+
+type SkillId = 'boletin' | 'evidencia' | 'brote' | 'documento';
+const SKILL_BUTTONS: { id: SkillId; label: string; Icon: React.FC<{ className?: string }>; color: string }[] = [
+  { id: 'boletin', label: 'Boletín epidemiológico', Icon: FileSpreadsheet, color: 'bg-rose-600' },
+  { id: 'evidencia', label: 'Revisión de evidencia', Icon: BookOpenCheck, color: 'bg-slate-800' },
+  { id: 'brote', label: 'Análisis de brote', Icon: Activity, color: 'bg-amber-600' },
+  { id: 'documento', label: 'Oficio o informe (Word)', Icon: FileSignature, color: 'bg-sky-700' },
+];
 
 export const Tasks: React.FC = () => {
   const { currentUser } = useAuth();
@@ -214,8 +224,7 @@ export const Tasks: React.FC = () => {
   };
 
   const [viewMode, setViewMode] = useState<'list' | 'flow'>('list');
-  const [showBulletin, setShowBulletin] = useState(false);
-  const [showEvidence, setShowEvidence] = useState(false);
+  const [openSkill, setOpenSkill] = useState<SkillId | null>(null);
 
   if (!currentOffice) {
     return <div className="text-center text-slate-500 mt-10">Please select an office first.</div>;
@@ -266,25 +275,31 @@ export const Tasks: React.FC = () => {
             <Wand2 className="w-4 h-4" />
             Generate Flow
           </button>
-          <button
-            onClick={() => setShowBulletin(v => !v)}
-            className="flex items-center gap-2 bg-rose-600 text-white px-4 py-2 rounded-xl font-medium hover:bg-rose-700 transition-colors shadow-sm"
-          >
-            <FileSpreadsheet className="w-4 h-4" />
-            Boletín epidemiológico
-          </button>
-          <button
-            onClick={() => setShowEvidence(v => !v)}
-            className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl font-medium hover:bg-slate-900 transition-colors shadow-sm"
-          >
-            <BookOpenCheck className="w-4 h-4" />
-            Revisión de evidencia
-          </button>
         </div>
       </header>
 
-      {showBulletin && <BulletinSkill office={currentOffice} onClose={() => setShowBulletin(false)} />}
-      {showEvidence && <EvidenceSkill office={currentOffice} onClose={() => setShowEvidence(false)} />}
+      <div className="flex flex-wrap items-center gap-2 mb-6">
+        <span className="text-xs font-bold uppercase tracking-wider text-slate-400 mr-1">Habilidades</span>
+        {SKILL_BUTTONS.map(({ id, label, Icon, color }) => (
+          <button
+            key={id}
+            onClick={() => setOpenSkill(s => (s === id ? null : id))}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium transition-colors shadow-sm ${
+              openSkill === id ? `${color} text-white` : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'}`}
+          >
+            <Icon className="w-4 h-4" />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {openSkill === 'boletin' && <BulletinSkill office={currentOffice} onClose={() => setOpenSkill(null)} />}
+      {openSkill === 'evidencia' && <EvidenceSkill office={currentOffice} onClose={() => setOpenSkill(null)} />}
+      {openSkill === 'brote' && <OutbreakSkill office={currentOffice} onClose={() => setOpenSkill(null)} />}
+      {openSkill === 'documento' && (
+        <DocumentSkill office={currentOffice} tasks={tasks} isOwner={currentOffice.ownerId === currentUser?.uid}
+                       onClose={() => setOpenSkill(null)} />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-1">
@@ -587,6 +602,16 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, workers, onStatusChange, onDe
               <span className="text-xs font-medium px-2 py-1 rounded-md flex items-center gap-1 bg-emerald-100 text-emerald-800">
                 <ThumbsUp className="w-3 h-3" /> Aprobada por ti
               </span>
+            )}
+
+            {task.result && task.status === 'done' && (
+              <button
+                onClick={() => engine.downloadTaskDocx(task.id, task.title).catch(e => alert(`No se pudo descargar: ${e.message}`))}
+                className="text-xs font-medium px-2 py-1 rounded-md flex items-center gap-1 bg-sky-50 text-sky-800 hover:bg-sky-100"
+                title="Descargar el entregable en Word (con el membrete de la oficina si hay plantilla)"
+              >
+                <FileDown className="w-3 h-3" /> Word
+              </button>
             )}
           </div>
 

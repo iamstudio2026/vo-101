@@ -6,6 +6,8 @@ import * as engine from '../services/engine';
 const SKILL_NAMES: Record<string, string> = {
   boletin_epidemiologico: 'Boletín epidemiológico',
   revision_evidencia: 'Revisión de evidencia',
+  analisis_brote: 'Análisis de brote',
+  documento_institucional: 'Documento institucional',
 };
 const skillNames = (ids: string[]) => ids.map(id => SKILL_NAMES[id] ?? id).join(', ');
 
@@ -22,7 +24,7 @@ export const TemplateButton: React.FC<{ office: Office }> = ({ office }) => {
       const r = await engine.applyTemplate(office.id, 'inteligencia_sanitaria');
       setNote(r.workers_created.length
         ? `Listo: se sumaron ${r.workers_created.join(', ')}${r.note_added ? ' y la nota SINAVE' : ''}. Habilidades activas: ${skillNames(r.skills)}.`
-        : 'La oficina ya tenía el equipo de la plantilla; solo se aseguraron la nota y la habilidad.');
+        : `La oficina ya tenía el equipo de la plantilla; se aseguraron la nota y las habilidades: ${skillNames(r.skills)}.`);
     } catch (e) {
       setNote(e instanceof Error ? e.message : 'No se pudo aplicar la plantilla.');
     } finally {
@@ -36,7 +38,7 @@ export const TemplateButton: React.FC<{ office: Office }> = ({ office }) => {
         onClick={apply}
         disabled={busy}
         className="text-xs font-bold px-3 py-1.5 rounded-lg border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 flex items-center gap-1 disabled:opacity-50"
-        title="Agrega 4 workers (Epidemióloga, Analista de datos, Revisora de evidencia, Redactor técnico), la nota SINAVE y las habilidades Boletín epidemiológico y Revisión de evidencia"
+        title="Agrega 4 workers (Epidemióloga, Analista de datos, Revisora de evidencia, Redactor técnico), la nota SINAVE y las habilidades Boletín epidemiológico, Revisión de evidencia, Análisis de brote y Documento institucional"
       >
         {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
         {applied ? 'Plantilla «Inteligencia sanitaria» aplicada · volver a aplicar' : 'Aplicar plantilla «Inteligencia sanitaria»'}

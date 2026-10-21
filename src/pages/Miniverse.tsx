@@ -70,6 +70,8 @@ const getTaskDepartment = (taskTitle: string, taskDesc: string = ""): string => 
   if (text.includes('imagen') || text.includes('foto') || text.includes('video') || text.includes('diseño') || text.includes('optic')) return 'optic';
   if (text.includes('code') || text.includes('program') || text.includes('bug') || text.includes('script') || text.includes('logic')) return 'logic';
   if (text.includes('search') || text.includes('buscar') || text.includes('investigar') || text.includes('oracle') || text.includes('evidencia') || text.includes('pubmed')) return 'oracle';
+  if (text.includes('brote')) return 'insight';
+  if (text.includes('oficio') || text.includes('nota informativa') || text.includes('informe técnico')) return 'forge';
   if (text.includes('insight') || text.includes('analizar') || text.includes('stats') || text.includes('estadística')) return 'insight';
   if (text.includes('creative') || text.includes('escribir') || text.includes('write') || text.includes('content') || text.includes('forge')) return 'forge';
   if (text.includes('book') || text.includes('library') || text.includes('archivo') || text.includes('bibliosfera')) return 'archive';
@@ -2142,6 +2144,15 @@ export const Miniverse: React.FC = () => {
                   >
                     <Download className="w-4 h-4" />
                     Descargar PDF
+                  </button>
+                  <button
+                    onClick={() => liveViewing?.result && engine.downloadTaskDocx(liveViewing.id, liveViewing.title)
+                      .catch(e => alert(`No se pudo descargar: ${e.message}`))}
+                    disabled={!liveViewing?.result}
+                    className="flex-1 py-3 bg-sky-700 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-sky-600 transition-all disabled:opacity-50"
+                  >
+                    <Download className="w-4 h-4" />
+                    Descargar Word
                   </button>
                 </div>
               </div>

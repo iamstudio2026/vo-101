@@ -21,6 +21,11 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 async function request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> {
+  const res = await send(method, path, body);
+  return res.json() as Promise<T>;
+}
+
+async function send(method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<Response> {
   const user = auth.currentUser;
   if (!user) throw new EngineError(401, 'Inicia sesión para usar la IA.');
   const token = await user.getIdToken();
@@ -42,8 +47,11 @@ async function request<T>(method: 'GET' | 'POST' | 'DELETE', path: string, body?
     } catch { /* non-JSON error body */ }
     throw new EngineError(res.status, detail);
   }
-  return res.json() as Promise<T>;
+  return res;
 }
+
+const del = <T>(path: string) => request<T>('DELETE', path);
+const office = (id: string) => `/offices/${encodeURIComponent(id)}`;
 
 export const refineTask = (title: string, description = '') =>
   post<{ title: string; description: string; department: string | null }>('/ai/refine', { title, description });
@@ -131,3 +139,74 @@ export const runEvidenceReview = (officeId: string, question: string, years = 10
   post<{ task_id: string; assigned_to: string | null }>('/skills/revision_evidencia/run', {
     office_id: officeId, question, years, max_articles: maxArticles,
   });
+
+// --- Population (rates per 100 000) -----------------------------------------------------
+export interface PopulationSummary {
+  filename: string; uploadedAt: string; years: number[]; municipios: number; total: Record<string, number>;
+}
+
+export const uploadPopulation = async (officeId: string, file: File) =>
+  post<PopulationSummary>(`${office(officeId)}/population`, {
+    office_id: officeId, filename: file.name, data_gz_b64: await gzipBase64(file),
+  });
+
+export const deletePopulation = (officeId: string) => del<{ ok: boolean }>(`${office(officeId)}/population`);
+
+// --- Skill: outbreak analysis -----------------------------------------------------------
+export interface OutbreakInspection {
+  upload_id: string;
+  filename: string;
+  rows: number;
+  columns: string[];
+  detected: Record<string, string | null>;
+  role_labels: Record<string, string>;
+  suggested_exposures: string[];
+  date_range: [string, string] | null;
+  caso_values: { value: string; count: number }[];
+}
+
+export const inspectOutbreakFile = async (officeId: string, file: File) =>
+  post<OutbreakInspection>('/skills/analisis_brote/inspect', {
+    office_id: officeId, filename: file.name, data_gz_b64: await gzipBase64(file),
+  });
+
+export const runOutbreak = (body: {
+  office_id: string;
+  upload_id: string;
+  mapping: Record<string, string | null>;
+  params: { evento: string; lugar: string; expuestos?: number; exposicion_comun: string; exposiciones: string[]; contexto: string };
+}) => post<{ task_id: string; assigned_to: string | null }>('/skills/analisis_brote/run', body);
+
+// --- Skill: institutional documents -----------------------------------------------------
+export interface DocPerson { nombre: string; cargo: string; institucion?: string }
+export interface DocHeader {
+  dependencia: string; area: string; numero: string; lugar: string; asunto: string;
+  destinatario: DocPerson; remitente: DocPerson; ccp: string[];
+}
+export type DocType = 'oficio' | 'nota_informativa' | 'informe_tecnico';
+
+export const runDocument = (body: {
+  office_id: string; tipo: DocType; encabezado: DocHeader; instrucciones: string; source_task_id?: string;
+}) => post<{ task_id: string; assigned_to: string | null }>('/skills/documento_institucional/run', body);
+
+export const uploadDocTemplate = async (officeId: string, file: File) => {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return post<{ filename: string }>(`${office(officeId)}/doc-template`, { filename: file.name, data_b64: btoa(binary) });
+};
+
+export const deleteDocTemplate = (officeId: string) => del<{ ok: boolean }>(`${office(officeId)}/doc-template`);
+
+/** Any delivered task as Word (.docx), built by the engine on the office's letterhead. */
+export async function downloadTaskDocx(taskId: string, title: string): Promise<void> {
+  const res = await send('GET', `/tasks/${encodeURIComponent(taskId)}/docx`);
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${title.replace(/[\\/:*?"<>|]+/g, '_').slice(0, 80) || 'documento'}.docx`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
